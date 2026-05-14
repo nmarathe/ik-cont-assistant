@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv init *)",
+      "Bash(cd \"C:\\\\Users\\\\Niranjan\\\\ik-cont-assistant\" && mv src/ik_cont_assistant src/ai_content_assistant 2>&1)",
+      "Bash(uv sync *)",
+      "Bash(uv python *)",
+      "Bash(OPENAI_API_KEY=sk-test SERP_API_KEY=serp-test uv run pytest tests/unit/test_state_management.py tests/unit/utils/ tests/e2e/test_streamlit_smoke.py -v --no-header)",
+      "Bash(OPENAI_API_KEY=sk-test SERP_API_KEY=serp-test uv run pytest tests/unit/agents/ tests/integration/ -v --no-header)",
+      "Bash(OPENAI_API_KEY=sk-test SERP_API_KEY=serp-test uv run pytest tests/integration/ tests/unit/agents/ -v --no-header)",
+      "Bash(OPENAI_API_KEY=sk-test SERP_API_KEY=serp-test uv run pytest tests/ --cov=src/ai_content_assistant --cov-report=term-missing --no-header -q)"
+    ]
+  }
+}

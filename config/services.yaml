@@ -1,0 +1,19 @@
+openai:
+  base_url: https://api.openai.com/v1
+  default_model: gpt-4o
+  fast_model: gpt-4o-mini
+  image_model: dall-e-3
+  timeout: 60
+
+perplexity:
+  base_url: https://api.perplexity.ai
+  model: sonar-pro
+
+serp:
+  base_url: https://serpapi.com/search.json
+  engine: google
+  timeout: 30
+
+stability:
+  base_url: https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image
+  timeout: 60

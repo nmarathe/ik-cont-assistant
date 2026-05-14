@@ -1,0 +1,14 @@
+environment: production
+log_level: INFO
+max_search_results: 10
+cache_ttl: 3600
+
+streamlit:
+  port: 8501
+  debug: false
+
+openai:
+  timeout: 60
+
+serp:
+  timeout: 30

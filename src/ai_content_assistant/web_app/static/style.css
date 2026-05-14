@@ -1,0 +1,20 @@
+/* Custom styles for AI Content Assistant */
+
+/* Wider content preview area */
+.main .block-container {
+    padding-top: 1rem;
+    max-width: 100%;
+}
+
+/* Chat message styling */
+.stChatMessage {
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+}
+
+/* Metric cards */
+[data-testid="metric-container"] {
+    background-color: #f0f2f6;
+    border-radius: 8px;
+    padding: 0.5rem;
+}

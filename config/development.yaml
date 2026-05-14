@@ -1,0 +1,14 @@
+environment: development
+log_level: DEBUG
+max_search_results: 5
+cache_ttl: 300
+
+streamlit:
+  port: 8501
+  debug: true
+
+openai:
+  timeout: 60
+
+serp:
+  timeout: 30
