@@ -1,18 +1,27 @@
-"""Routing functions for LangGraph conditional edges."""
+"""Routing functions for LangGraph conditional edges.
+
+Design: LangGraph requires conditional edges to return a string (the next node name).
+These functions encapsulate routing logic at key decision points in the workflow.
+A whitelist of valid nodes prevents invalid routing from typos or unexpected state.
+Error checks at each routing point ensure failures gracefully exit to error_handler."""
 
 import logging
-
 from langgraph.graph import END
-
 from ai_content_assistant.workflow.state_management import AgentState
 
 logger = logging.getLogger(__name__)
 
+# Whitelist of valid agent node names. Prevents typos/invalid routing from breaking the graph.
 _VALID_NODES = {"research", "blog", "linkedin", "image", "content_strategist"}
 
 
 def route_after_query_handler(state: AgentState) -> str:
-    """Map next_agent value to a graph node name."""
+    """Route from query handler to the appropriate content agent.
+
+    Validates next_agent against the whitelist. Defaults to research if
+    next_agent is missing or invalid (graceful degradation). If an error
+    occurred during query classification, route to error_handler instead.
+    """
     agent = state.get("next_agent", "research")
     if agent not in _VALID_NODES:
         logger.warning("Unknown next_agent '%s'; routing to research", agent)
@@ -23,7 +32,12 @@ def route_after_query_handler(state: AgentState) -> str:
 
 
 def route_after_research(state: AgentState) -> str:
-    """After research: go to content_strategist for strategy type, else end."""
+    """Route after research completes.
+
+    If content_type is "strategy", pass research output to content_strategist
+    for formatting into a strategic content plan. Otherwise end (research result
+    is the final output). Error checks before each routing decision.
+    """
     if state.get("error"):
         return "error_handler"
     if state.get("content_type") == "strategy":
@@ -32,7 +46,11 @@ def route_after_research(state: AgentState) -> str:
 
 
 def handle_error(state: AgentState) -> AgentState:
-    """Format the error into a user-friendly final_content message."""
+    """Format errors into a user-friendly final_content message.
+
+    Catches errors from any agent and surfaces them gracefully to the user.
+    Clears the error flag so the workflow can terminate cleanly.
+    """
     error = state.get("error", "An unexpected error occurred.")
     logger.error("Workflow error: %s", error)
     return {
