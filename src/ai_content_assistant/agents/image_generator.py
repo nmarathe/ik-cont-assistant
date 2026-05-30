@@ -6,6 +6,7 @@ from ai_content_assistant.agents.image_prompts import PROMPT_OPTIMIZER_SYSTEM
 from ai_content_assistant.core.config import settings
 from ai_content_assistant.integrations.image_clients import stability_client
 from ai_content_assistant.integrations.openai_client import openai_client
+from ai_content_assistant.utils.guardrails import async_check_moderation, check_image_prompt
 from ai_content_assistant.workflow.state_management import AgentState
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,8 @@ class ImageGenerator:
         logger.info("ImageGenerator processing: %s", intent[:80])
 
         optimized = await self.optimize_prompt(intent)
+        check_image_prompt(optimized)
+        await async_check_moderation(optimized)
         result = await self.generate(optimized)
 
         return {

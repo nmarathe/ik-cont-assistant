@@ -8,6 +8,8 @@ from typing import Optional
 from ai_content_assistant.agents.blog_prompts import BLOG_SYSTEM, META_SYSTEM
 from ai_content_assistant.core.config import settings
 from ai_content_assistant.integrations.openai_client import openai_client
+from ai_content_assistant.utils.content_optimization import score_readability
+from ai_content_assistant.utils.quality_validation import validate_blog
 from ai_content_assistant.workflow.state_management import AgentState
 
 logger = logging.getLogger(__name__)
@@ -64,8 +66,16 @@ class BlogWriter:
         blog_content = "".join(chunks)
 
         meta = await self.generate_meta(blog_content)
+        validation = validate_blog(blog_content)
+        readability = score_readability(blog_content)
         return {
             **state,
             "final_content": blog_content,
-            "metadata": {**(state.get("metadata") or {}), **meta},
+            "metadata": {
+                **(state.get("metadata") or {}),
+                **meta,
+                "quality_score": validation["score"],
+                "quality_issues": validation["issues"],
+                "readability": readability,
+            },
         }

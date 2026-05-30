@@ -1,5 +1,6 @@
 """Query Handler Agent — classifies intent and routes to the right agent."""
 
+import asyncio
 import json
 import logging
 
@@ -61,8 +62,10 @@ class QueryHandler:
     async def run(self, state: AgentState) -> AgentState:
         """Classify intent, detect follow-ups, set next_agent and content_type."""
         logger.info("QueryHandler processing: %s", state["user_message"][:80])
-        intent = await self.classify_intent(state["user_message"])
-        is_followup = await self.detect_followup(state)
+        intent, is_followup = await asyncio.gather(
+            self.classify_intent(state["user_message"]),
+            self.detect_followup(state),
+        )
 
         # Map strategy intent to content_strategist node
         next_agent = "content_strategist" if intent == "strategy" else intent

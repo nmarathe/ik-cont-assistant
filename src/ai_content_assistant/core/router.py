@@ -22,12 +22,12 @@ def route_after_query_handler(state: AgentState) -> str:
     next_agent is missing or invalid (graceful degradation). If an error
     occurred during query classification, route to error_handler instead.
     """
+    if state.get("error"):
+        return "error_handler"
     agent = state.get("next_agent", "research")
     if agent not in _VALID_NODES:
         logger.warning("Unknown next_agent '%s'; routing to research", agent)
         return "research"
-    if state.get("error"):
-        return "error_handler"
     return str(agent)
 
 

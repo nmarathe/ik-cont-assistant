@@ -2,19 +2,26 @@
 
 import asyncio
 import logging
+import queue as queue_module
+import threading
+import time
 
-import nest_asyncio
 import streamlit as st
 
-from ai_content_assistant.core.config import configure_logging
-from ai_content_assistant.core.workflow import process_request
+from ai_content_assistant.core.config import configure_logging, settings
+from ai_content_assistant.core.workflow import stream_request
+from ai_content_assistant.utils.guardrails import (
+    ContentFlaggedError,
+    InputTooLongError,
+    check_input_length,
+    check_moderation,
+    detect_pii,
+)
 from ai_content_assistant.web_app.components.chat_panel import render_chat_history, render_input_area
 from ai_content_assistant.web_app.components.content_preview import render_preview
 from ai_content_assistant.web_app.components.sidebar import render_sidebar
 from ai_content_assistant.workflow.state_management import append_to_history
 
-# Allow asyncio.run() inside Streamlit's existing event loop
-nest_asyncio.apply()
 configure_logging()
 logger = logging.getLogger(__name__)
 
@@ -29,18 +36,72 @@ def initialize_session_state() -> None:
         "word_count": 2000,
         "keywords": "",
         "content_type": "",
+        "request_count": 0,
+        "rate_window_start": None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
 
 
+def _validate_input(text: str) -> bool:
+    """Run all pre-workflow guards. Returns False (and shows st.error) if blocked."""
+    now = time.time()
+    if st.session_state.rate_window_start is None or \
+            now - st.session_state.rate_window_start > 3600:
+        st.session_state.request_count = 0
+        st.session_state.rate_window_start = now
+
+    if st.session_state.request_count >= settings.max_requests_per_hour:
+        st.error(
+            f"Rate limit reached ({settings.max_requests_per_hour} requests/hour). "
+            "Please wait before sending another request."
+        )
+        return False
+
+    try:
+        check_input_length(text)
+        check_moderation(text)
+    except (InputTooLongError, ContentFlaggedError) as exc:
+        st.error(str(exc))
+        return False
+
+    pii_types = detect_pii(text)
+    if pii_types:
+        st.warning(
+            f"Your message appears to contain sensitive information "
+            f"({', '.join(pii_types)}). It will be sent to external AI services."
+        )
+
+    st.session_state.request_count += 1
+    return True
+
+
 def _run_workflow(user_message: str) -> dict:
-    """Synchronously invoke the async workflow from Streamlit."""
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(
-        process_request(user_message, dict(st.session_state))
-    )
+    """Run the async workflow in a dedicated thread; stream per-node progress."""
+    result_queue: queue_module.Queue = queue_module.Queue()
+    session_copy = dict(st.session_state)
+
+    async def _collect() -> None:
+        final_state: dict = {}
+        async for node_name, delta in stream_request(user_message, session_copy):
+            result_queue.put(("step", node_name, delta))
+            final_state.update(delta)
+        result_queue.put(("done", None, final_state))
+
+    threading.Thread(target=lambda: asyncio.run(_collect()), daemon=True).start()
+
+    final_state: dict = {}
+    with st.status("Processing your request…") as status:
+        while True:
+            msg = result_queue.get(timeout=120)
+            if msg[0] == "done":
+                final_state = msg[2]
+                status.update(label="Done!", state="complete")
+                break
+            _, node_name, _ = msg
+            status.update(label=f"Running: {node_name.replace('_', ' ').title()}…")
+    return final_state
 
 
 def main() -> None:
@@ -74,41 +135,42 @@ def main() -> None:
 
     # Process new input
     if user_input:
-        # Show user message immediately
         st.session_state.messages.append({"role": "user", "content": user_input})
 
-        with st.spinner("Generating content…"):
-            try:
-                result = _run_workflow(user_input)
-                st.session_state.current_state = result
+        if not _validate_input(user_input):
+            st.rerun()
 
-                # Add assistant response to chat
-                assistant_msg = result.get("final_content") or "I couldn't generate a response. Please try again."
-                # For non-image content, show a short preview in chat
-                if result.get("content_type") == "image":
-                    preview_msg = f"✅ Image generated! See the preview panel →\n\n*Prompt used:* {(result.get('metadata') or {}).get('prompt_used', '')[:100]}"
-                else:
-                    preview_msg = assistant_msg[:300] + ("…" if len(assistant_msg) > 300 else "")
+        try:
+            result = _run_workflow(user_input)
+            st.session_state.current_state = result
 
-                st.session_state.messages.append({"role": "assistant", "content": preview_msg})
+            # Add assistant response to chat
+            assistant_msg = result.get("final_content") or "I couldn't generate a response. Please try again."
+            # For non-image content, show a short preview in chat
+            if result.get("content_type") == "image":
+                preview_msg = f"✅ Image generated! See the preview panel →\n\n*Prompt used:* {(result.get('metadata') or {}).get('prompt_used', '')[:100]}"
+            else:
+                preview_msg = assistant_msg[:300] + ("…" if len(assistant_msg) > 300 else "")
 
-                # Update agent conversation history (last 5)
-                agent_hist = append_to_history(
-                    {"conversation_history": st.session_state.agent_history,
-                     "user_message": user_input,
-                     "next_agent": None, "research_output": None,
-                     "sources": None, "final_content": None,
-                     "content_type": None, "error": None, "metadata": None},
-                    "user",
-                    user_input,
-                )
-                agent_hist = append_to_history(agent_hist, "assistant", assistant_msg[:500])
-                st.session_state.agent_history = agent_hist["conversation_history"]
+            st.session_state.messages.append({"role": "assistant", "content": preview_msg})
 
-            except Exception as exc:
-                logger.error("Workflow error: %s", exc, exc_info=True)
-                error_msg = f"An error occurred: {exc}"
-                st.session_state.messages.append({"role": "assistant", "content": error_msg})
+            # Update agent conversation history (last 5)
+            agent_hist = append_to_history(
+                {"conversation_history": st.session_state.agent_history,
+                 "user_message": user_input,
+                 "next_agent": None, "research_output": None,
+                 "sources": None, "final_content": None,
+                 "content_type": None, "error": None, "metadata": None},
+                "user",
+                user_input,
+            )
+            agent_hist = append_to_history(agent_hist, "assistant", assistant_msg[:500])
+            st.session_state.agent_history = agent_hist["conversation_history"]
+
+        except Exception as exc:
+            logger.error("Workflow error: %s", exc, exc_info=True)
+            error_msg = f"An error occurred: {exc}"
+            st.session_state.messages.append({"role": "assistant", "content": error_msg})
 
         st.rerun()
 

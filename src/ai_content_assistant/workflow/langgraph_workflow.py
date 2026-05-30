@@ -94,6 +94,29 @@ def get_graph():
     return _compiled_graph
 
 
+async def stream_workflow(
+    user_message: str,
+    conversation_history: list | None = None,
+    metadata: dict | None = None,
+):
+    """Async generator yielding (node_name, state_delta) as each node completes."""
+    initial_state = AgentState(
+        user_message=user_message,
+        conversation_history=conversation_history or [],
+        next_agent=None,
+        research_output=None,
+        sources=None,
+        final_content=None,
+        content_type=None,
+        error=None,
+        metadata=metadata or {},
+    )
+    graph = get_graph()
+    async for chunk in graph.astream(initial_state, stream_mode="updates"):
+        for node_name, state_delta in chunk.items():
+            yield node_name, state_delta
+
+
 async def run_workflow(
     user_message: str,
     conversation_history: list | None = None,

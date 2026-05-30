@@ -42,6 +42,13 @@ class AgentState(TypedDict):
     metadata: Optional[dict]
 
 
+def append_to_history(state: AgentState, role: str, content: str) -> AgentState:
+    """Return a copy of state with role+content appended (sliding-window capped)."""
+    new_message: ConversationMessage = {"role": role, "content": content}
+    updated = _merge_history(list(state.get("conversation_history") or []), [new_message])
+    return {**state, "conversation_history": updated}  # type: ignore[return-value]
+
+
 def create_initial_state(user_message: str) -> AgentState:
     """Return a fresh AgentState for a new user message."""
     return AgentState(

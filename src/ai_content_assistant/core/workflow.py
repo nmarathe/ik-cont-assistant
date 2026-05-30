@@ -2,7 +2,7 @@
 
 import logging
 
-from ai_content_assistant.workflow.langgraph_workflow import run_workflow
+from ai_content_assistant.workflow.langgraph_workflow import run_workflow, stream_workflow
 from ai_content_assistant.workflow.state_management import AgentState
 
 logger = logging.getLogger(__name__)
@@ -27,3 +27,16 @@ async def process_request(user_message: str, session_state: dict) -> AgentState:
         conversation_history=history,
         metadata=metadata,
     )
+
+
+async def stream_request(user_message: str, session_state: dict):
+    """Async generator streaming (node_name, state_delta) as each node completes."""
+    history = session_state.get("messages", [])[-5:]
+    metadata = {
+        "tone": session_state.get("tone", "professional"),
+        "word_count": session_state.get("word_count", 2000),
+        "keywords": session_state.get("keywords", ""),
+        "content_type_hint": session_state.get("content_type", ""),
+    }
+    async for node, delta in stream_workflow(user_message, history, metadata):
+        yield node, delta

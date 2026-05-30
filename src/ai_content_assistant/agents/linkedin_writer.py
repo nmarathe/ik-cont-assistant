@@ -7,6 +7,7 @@ from typing import Optional
 from ai_content_assistant.agents.linkedin_prompts import HASHTAG_SYSTEM, LINKEDIN_SYSTEM, VARIANTS_SYSTEM
 from ai_content_assistant.core.config import settings
 from ai_content_assistant.integrations.openai_client import openai_client
+from ai_content_assistant.utils.quality_validation import validate_linkedin
 from ai_content_assistant.workflow.state_management import AgentState
 
 logger = logging.getLogger(__name__)
@@ -87,6 +88,7 @@ class LinkedInWriter:
 
         hashtag_str = " ".join(hashtags)
         final = f"{post}\n\n{hashtag_str}" if hashtag_str else post
+        validation = validate_linkedin(final)
 
         return {
             **state,
@@ -95,6 +97,8 @@ class LinkedInWriter:
                 **(state.get("metadata") or {}),
                 "hashtags": hashtags,
                 "variants": variants,
+                "quality_score": validation["score"],
+                "quality_issues": validation["issues"],
             },
         }
 

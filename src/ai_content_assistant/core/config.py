@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     blog_target_word_count: int = 2000
     linkedin_max_chars: int = 3000
 
+    # Guardrail limits
+    max_input_length: int = 2000
+    max_requests_per_hour: int = 20
+
     # Runtime environment control
     env: str = "development"
     log_level: str = "INFO"
