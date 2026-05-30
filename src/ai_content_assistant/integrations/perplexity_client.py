@@ -3,6 +3,8 @@
 import logging
 import re
 
+import httpx
+import certifi
 from openai import AsyncOpenAI
 
 from ai_content_assistant.core.config import settings
@@ -17,8 +19,7 @@ class PerplexityClient:
     """Research client backed by Perplexity Sonar."""
 
     def __init__(self) -> None:
-        api_key = settings.perplexity_api_key or "not-configured"
-        self._client = AsyncOpenAI(base_url=_PERPLEXITY_BASE, api_key=api_key)
+        self._api_key = settings.perplexity_api_key or "not-configured"
 
     async def research(self, query: str) -> tuple[str, list[str]]:
         """Return (answer_text, source_urls). Falls back gracefully if key is missing."""
@@ -27,11 +28,17 @@ class PerplexityClient:
             return "", []
 
         logger.info("Perplexity research: %s", query)
-        response = await self._client.chat.completions.create(
-            model=_MODEL,
-            messages=[{"role": "user", "content": query}],
-            max_tokens=1500,
-        )
+        async with httpx.AsyncClient(verify=certifi.where()) as http:
+            client = AsyncOpenAI(
+                base_url=_PERPLEXITY_BASE,
+                api_key=self._api_key,
+                http_client=http,
+            )
+            response = await client.chat.completions.create(
+                model=_MODEL,
+                messages=[{"role": "user", "content": query}],
+                max_tokens=1500,
+            )
         answer = response.choices[0].message.content or ""
         urls = self._extract_urls(answer)
         return answer, urls

@@ -5,6 +5,7 @@ import logging
 from typing import Any
 
 import httpx
+import certifi
 from cachetools import TTLCache
 
 from ai_content_assistant.core.config import settings
@@ -47,7 +48,7 @@ class SerpClient:
             "api_key": settings.serp_api_key,
             "engine": "google",
         }
-        async with httpx.AsyncClient(timeout=self._TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=self._TIMEOUT, verify=certifi.where()) as client:
             response = await client.get(self._BASE_URL, params=params)
             response.raise_for_status()
             data = response.json()

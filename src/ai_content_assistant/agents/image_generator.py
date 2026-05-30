@@ -32,9 +32,9 @@ class ImageGenerator:
         """Generate an image; return {url, revised_prompt, source}."""
         try:
             result = await openai_client.generate_image(prompt)
-            return {**result, "source": "dall-e-3"}
+            return {**result, "source": settings.image_model}
         except Exception as exc:
-            logger.warning("DALL-E 3 failed (%s); trying Stability AI", exc)
+            logger.warning("%s failed (%s); trying Stability AI", settings.image_model, exc)
             if settings.stability_api_key:
                 b64 = await stability_client.generate(prompt)
                 return {
@@ -47,12 +47,33 @@ class ImageGenerator:
     async def run(self, state: AgentState) -> AgentState:
         """Optimize prompt and generate image."""
         intent = state["user_message"]
+        print(f"[ImageGenerator] run() called, intent={intent[:40]!r}", flush=True)
         logger.info("ImageGenerator processing: %s", intent[:80])
 
-        optimized = await self.optimize_prompt(intent)
+        try:
+            optimized = await self.optimize_prompt(intent)
+            print(f"[ImageGenerator] optimize_prompt OK: {optimized[:60]!r}", flush=True)
+            logger.info("ImageGenerator: optimize_prompt OK")
+        except Exception as exc:
+            print(f"[ImageGenerator] optimize_prompt FAILED {type(exc).__name__}: {exc}", flush=True)
+            logger.error("ImageGenerator: optimize_prompt FAILED %s: %s", type(exc).__name__, exc)
+            raise
+
         check_image_prompt(optimized)
-        await async_check_moderation(optimized)
-        result = await self.generate(optimized)
+
+        try:
+            await async_check_moderation(optimized)
+            logger.info("ImageGenerator: moderation OK")
+        except Exception as exc:
+            logger.error("ImageGenerator: moderation FAILED %s: %s", type(exc).__name__, exc)
+            raise
+
+        try:
+            result = await self.generate(optimized)
+            logger.info("ImageGenerator: generate OK, url len=%d", len(result.get("url", "")))
+        except Exception as exc:
+            logger.error("ImageGenerator: generate FAILED %s: %s", type(exc).__name__, exc)
+            raise
 
         return {
             **state,

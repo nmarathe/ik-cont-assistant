@@ -25,8 +25,9 @@ def _make_node(agent_instance):
         try:
             return await agent_instance.run(state)
         except Exception as exc:
+            print(f"[_make_node] {type(agent_instance).__name__} raised {type(exc).__name__}: {exc}", flush=True)
             logger.error("%s failed: %s", type(agent_instance).__name__, exc, exc_info=True)
-            return {**state, "error": str(exc)}
+            return {**state, "error": f"{type(exc).__name__}: {exc}"}
     node.__name__ = type(agent_instance).__name__
     return node
 

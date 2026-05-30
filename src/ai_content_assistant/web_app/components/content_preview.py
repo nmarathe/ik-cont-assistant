@@ -1,5 +1,9 @@
 """Content preview panel — displays generated content with quality metrics and download options."""
 
+import base64
+
+import httpx
+import certifi
 import streamlit as st
 
 from ai_content_assistant.utils.export_tools import generate_filename, to_markdown, to_plain_text
@@ -9,6 +13,21 @@ from ai_content_assistant.utils.quality_validation import score_content
 def render_preview(state: dict | None) -> None:
     """Render the right-side content preview panel."""
     st.subheader("Content Preview")
+
+    # --- TEMPORARY DEBUG (remove after fixing) ---
+    if state is None:
+        st.warning("DEBUG: state is None — current_state was never set")
+    else:
+        metadata_dbg = state.get("metadata") or {}
+        fc = state.get("final_content") or ""
+        st.info(
+            f"DEBUG ▸ content_type={state.get('content_type')!r} | "
+            f"final_content len={len(fc)} | "
+            f"metadata keys={list(metadata_dbg.keys())} | "
+            f"image_url len={len(str(metadata_dbg.get('image_url') or ''))} | "
+            f"error={state.get('error')!r}"
+        )
+    # --- END DEBUG ---
 
     if not state or not state.get("final_content"):
         st.info("Generated content will appear here once you submit a request.")
@@ -63,10 +82,20 @@ def _render_image_preview(state: dict, metadata: dict) -> None:
     source = metadata.get("image_source", "")
 
     if image_url.startswith("data:image"):
-        # base64 image from Stability AI
-        st.image(image_url, caption=f"Generated via {source}", use_container_width=True)
+        # st.image() doesn't accept data URIs as strings — decode to bytes first
+        try:
+            b64_data = image_url.split(",", 1)[1]
+            img_bytes = base64.b64decode(b64_data)
+            st.image(img_bytes, caption=f"Generated via {source}", use_container_width=True)
+        except Exception as exc:
+            st.warning(f"Could not render image: {exc}")
     elif image_url:
-        st.image(image_url, caption=f"Generated via {source}", use_container_width=True)
+        try:
+            with httpx.Client(verify=certifi.where()) as client:
+                img_bytes = client.get(image_url, timeout=30).content
+            st.image(img_bytes, caption=f"Generated via {source}", use_container_width=True)
+        except Exception as exc:
+            st.warning(f"Could not fetch image: {exc}")
     else:
         st.warning("Image URL not available")
 

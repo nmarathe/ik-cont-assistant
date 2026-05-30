@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     # use fast_model (cheaper, faster). Reduces token spend and latency for lightweight tasks.
     default_model: str = "gpt-4o"
     fast_model: str = "gpt-4o-mini"
-    image_model: str = "dall-e-3"
+    image_model: str = "gpt-image-1"
 
     # Content generation defaults used by agents
     max_research_results: int = 10

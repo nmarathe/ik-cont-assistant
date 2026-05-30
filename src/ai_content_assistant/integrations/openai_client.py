@@ -1,10 +1,19 @@
-"""OpenAI client wrapper with retry logic, streaming, and token logging."""
+"""OpenAI client wrapper with retry logic, streaming, and token logging.
 
+All HTTP calls use the synchronous OpenAI client via asyncio.run_in_executor so
+they execute on a thread-pool worker. This sidesteps an async httpx/SSL issue on
+Windows where verify=False is not honoured inside the ProactorEventLoop that
+Streamlit's tornado server installs in the main thread.
+"""
+
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
-from openai import AsyncOpenAI, RateLimitError
+import httpx
+import certifi
+from openai import OpenAI, RateLimitError
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from ai_content_assistant.core.config import settings
@@ -12,11 +21,14 @@ from ai_content_assistant.core.config import settings
 logger = logging.getLogger(__name__)
 
 
-class OpenAIClient:
-    """Thin async wrapper around the OpenAI SDK."""
+def _make_sync_client() -> tuple["OpenAI", "httpx.Client"]:
+    """Return (OpenAI, httpx.Client) — caller must close the httpx client."""
+    http = httpx.Client(verify=certifi.where())
+    return OpenAI(api_key=settings.openai_api_key, http_client=http), http
 
-    def __init__(self) -> None:
-        self._client = AsyncOpenAI(api_key=settings.openai_api_key)
+
+class OpenAIClient:
+    """Async wrapper around the sync OpenAI SDK, run via executor."""
 
     @retry(
         stop=stop_after_attempt(3),
@@ -42,7 +54,12 @@ class OpenAIClient:
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
 
-        response = await self._client.chat.completions.create(**kwargs)
+        def _call() -> Any:
+            client, http = _make_sync_client()
+            with http:
+                return client.chat.completions.create(**kwargs)
+
+        response = await asyncio.get_running_loop().run_in_executor(None, _call)
         usage = response.usage
         usage_dict = {
             "prompt_tokens": usage.prompt_tokens if usage else 0,
@@ -56,8 +73,7 @@ class OpenAIClient:
             usage_dict["completion_tokens"],
             usage_dict["total_tokens"],
         )
-        content = response.choices[0].message.content or ""
-        return content, usage_dict
+        return response.choices[0].message.content or "", usage_dict
 
     async def chat_stream(
         self,
@@ -65,37 +81,65 @@ class OpenAIClient:
         model: str | None = None,
         max_tokens: int = 3500,
     ) -> AsyncIterator[str]:
-        """Yield content chunks for streaming long-form outputs."""
-        stream = await self._client.chat.completions.create(
-            model=model or settings.default_model,
-            messages=messages,
-            max_tokens=max_tokens,
-            stream=True,
-        )
-        async for chunk in stream:
-            delta = chunk.choices[0].delta.content
-            if delta:
-                yield delta
+        """Yield content chunks. Collected synchronously in executor, then yielded."""
+        def _collect() -> list[str]:
+            client, http = _make_sync_client()
+            chunks: list[str] = []
+            with http:
+                with client.chat.completions.create(
+                    model=model or settings.default_model,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    stream=True,
+                ) as stream:
+                    for chunk in stream:
+                        delta = chunk.choices[0].delta.content
+                        if delta:
+                            chunks.append(delta)
+            return chunks
+
+        for chunk in await asyncio.get_running_loop().run_in_executor(None, _collect):
+            yield chunk
 
     async def generate_image(
         self,
         prompt: str,
         size: str = "1024x1024",
-        quality: str = "standard",
+        quality: str = "auto",
     ) -> dict[str, str]:
-        """Generate an image and return {url, revised_prompt}."""
-        response = await self._client.images.generate(
-            model=settings.image_model,
-            prompt=prompt,
-            size=size,  # type: ignore[arg-type]
-            quality=quality,  # type: ignore[arg-type]
-            n=1,
-        )
-        item = response.data[0]
-        return {
-            "url": item.url or "",
-            "revised_prompt": item.revised_prompt or prompt,
+        """Generate an image and return {url, revised_prompt}.
+
+        gpt-image-1 returns base64 only; dall-e-3 returns a URL.
+        """
+        model = settings.image_model
+        use_b64 = model == "gpt-image-1"
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "prompt": prompt,
+            "size": size,
+            "n": 1,
         }
+        if use_b64:
+            kwargs["output_format"] = "png"
+        else:
+            kwargs["quality"] = quality  # type: ignore[assignment]
+
+        def _call() -> Any:
+            client, http = _make_sync_client()
+            with http:
+                return client.images.generate(**kwargs)
+
+        response = await asyncio.get_running_loop().run_in_executor(None, _call)
+        item = response.data[0]
+        if use_b64:
+            b64 = item.b64_json or ""
+            url = f"data:image/png;base64,{b64}"
+            revised = prompt
+        else:
+            url = item.url or ""
+            revised = item.revised_prompt or prompt  # type: ignore[attr-defined]
+
+        return {"url": url, "revised_prompt": revised}
 
 
 openai_client = OpenAIClient()

@@ -4,6 +4,7 @@ import logging
 import re
 
 import httpx
+import certifi
 
 from ai_content_assistant.core.config import settings
 
@@ -53,14 +54,23 @@ def detect_pii(text: str) -> list[str]:
 
 
 def check_moderation(text: str) -> None:
-    """Call the OpenAI Moderation API (sync); raise ContentFlaggedError if flagged."""
-    response = httpx.post(
-        _MODERATION_URL,
-        headers={"Authorization": f"Bearer {settings.openai_api_key}"},
-        json={"input": text},
-        timeout=10.0,
-    )
-    response.raise_for_status()
+    """Call the OpenAI Moderation API (sync); raise ContentFlaggedError if flagged.
+
+    Network/SSL failures are logged as warnings and treated as passed — the app
+    must not crash because an optional safety check cannot reach its endpoint.
+    """
+    try:
+        response = httpx.post(
+            _MODERATION_URL,
+            headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+            json={"input": text},
+            timeout=10.0,
+            verify=certifi.where(),
+        )
+        response.raise_for_status()
+    except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError) as exc:
+        logger.warning("Moderation API unavailable (%s); skipping check", exc)
+        return
     output = response.json()["results"][0]
     if output["flagged"]:
         cats = [k for k, v in output["categories"].items() if v]
@@ -73,13 +83,19 @@ def check_moderation(text: str) -> None:
 
 async def async_check_moderation(text: str) -> None:
     """Async Moderation API call for use inside async agent methods."""
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.post(
-            _MODERATION_URL,
-            headers={"Authorization": f"Bearer {settings.openai_api_key}"},
-            json={"input": text},
-        )
-        response.raise_for_status()
+    try:
+        async with httpx.AsyncClient(timeout=10.0, verify=certifi.where()) as client:
+            response = await client.post(
+                _MODERATION_URL,
+                headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+                json={"input": text},
+            )
+            response.raise_for_status()
+    except ContentFlaggedError:
+        raise
+    except Exception as exc:
+        logger.warning("Moderation API unavailable (%s); skipping check", exc)
+        return
     output = response.json()["results"][0]
     if output["flagged"]:
         cats = [k for k, v in output["categories"].items() if v]

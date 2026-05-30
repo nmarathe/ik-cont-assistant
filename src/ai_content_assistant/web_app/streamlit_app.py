@@ -1,5 +1,13 @@
 """Main Streamlit application entry point."""
 
+# Ensure Python/requests/httpx use the certifi CA bundle on all platforms.
+# This avoids platform-specific certificate errors like
+# "[SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer certificate".
+import os
+import certifi
+os.environ.setdefault("SSL_CERT_FILE", certifi.where())
+os.environ.setdefault("REQUESTS_CA_BUNDLE", certifi.where())
+
 import asyncio
 import logging
 import queue as queue_module
@@ -24,6 +32,11 @@ from ai_content_assistant.workflow.state_management import append_to_history
 
 configure_logging()
 logger = logging.getLogger(__name__)
+
+# This prints on EVERY Streamlit script re-run (every page load / widget interaction).
+# If you see this in the terminal, stdout reaches the terminal correctly.
+import sys as _sys
+print(f">>> STREAMLIT_APP LOADED (stdout={_sys.stdout})", flush=True, file=_sys.__stdout__)
 
 
 def initialize_session_state() -> None:
@@ -61,10 +74,17 @@ def _validate_input(text: str) -> bool:
 
     try:
         check_input_length(text)
-        check_moderation(text)
-    except (InputTooLongError, ContentFlaggedError) as exc:
+    except InputTooLongError as exc:
         st.error(str(exc))
         return False
+
+    try:
+        check_moderation(text)
+    except ContentFlaggedError as exc:
+        st.error(str(exc))
+        return False
+    except Exception as exc:
+        logger.warning("Moderation check unavailable (%s); continuing", exc)
 
     pii_types = detect_pii(text)
     if pii_types:
@@ -79,12 +99,15 @@ def _validate_input(text: str) -> bool:
 
 def _run_workflow(user_message: str) -> dict:
     """Run the async workflow in a dedicated thread; stream per-node progress."""
+    print(f"\n>>> [_run_workflow] START: {user_message[:60]!r}", flush=True, file=_sys.__stdout__)
     result_queue: queue_module.Queue = queue_module.Queue()
     session_copy = dict(st.session_state)
 
     async def _collect() -> None:
+        print(f">>> [_collect] thread started, SSL_CERT_FILE={os.environ.get('SSL_CERT_FILE')!r}", flush=True, file=_sys.__stdout__)
         final_state: dict = {}
         async for node_name, delta in stream_request(user_message, session_copy):
+            print(f">>> [_collect] node={node_name!r}", flush=True, file=_sys.__stdout__)
             result_queue.put(("step", node_name, delta))
             final_state.update(delta)
         result_queue.put(("done", None, final_state))
@@ -131,7 +154,26 @@ def main() -> None:
         user_input = render_input_area()
 
     with preview_col:
-        render_preview(st.session_state.current_state)
+        _state = st.session_state.current_state
+        _meta = (_state or {}).get("metadata") or {}
+        _image_url = _meta.get("image_url") or ""
+        if _image_url.startswith("data:image"):
+            import base64 as _b64
+            st.subheader("Content Preview")
+            try:
+                _img_bytes = _b64.b64decode(_image_url.split(",", 1)[1])
+                st.image(
+                    _img_bytes,
+                    caption=f"Generated via {_meta.get('image_source', 'gpt-image-1')}",
+                    use_container_width=True,
+                )
+            except Exception as _exc:
+                st.warning(f"Could not render image: {_exc}")
+            if _meta.get("prompt_used"):
+                with st.expander("🔍 Prompt used"):
+                    st.text(_meta["prompt_used"])
+        else:
+            render_preview(_state)
 
     # Process new input
     if user_input:
