@@ -173,15 +173,16 @@ The app will be available at `http://localhost:8501`.
 
 ```
 src/ai_content_assistant/
-├── agents/              Six specialized agents + companion prompt files
-├── core/                Config, router, workflow facade
+├── agents/              Six specialized agents + companion *_prompts.py files
+├── core/                Config (Pydantic BaseSettings), router, workflow facade
 ├── integrations/        OpenAI, SERP, Perplexity, Stability AI clients
-├── utils/               Content optimization, quality validation, export
-├── web_app/             Streamlit app + UI components
+├── utils/               Content optimization, quality validation, guardrails, export
+├── web_app/             Streamlit app + UI components (sidebar, chat, preview)
 └── workflow/            AgentState TypedDict + LangGraph graph
 
-config/                  Per-environment YAML config
-tests/                   Unit, integration, and e2e test suites
+config/                  Per-environment YAML config + services.yaml (API URLs, timeouts)
+tests/                   Unit (22), integration (3), and e2e smoke (3) test suites
+pyproject.toml           Project metadata + dependencies (managed by UV)
 Dockerfile               Multi-stage production container image
 docker-compose.yml       Single-command deployment
 ```
@@ -191,6 +192,7 @@ docker-compose.yml       Single-command deployment
 ## Contributing
 
 - Code style: `uv run ruff check src/ tests/`
-- All public methods require type hints
+- All public methods require type hints and a one-line docstring
 - New agents must implement `async def run(self, state: AgentState) -> AgentState`
+- Agent system prompts go in a companion `<agent>_prompts.py` file — not inline
 - New features require unit tests with mocked API calls

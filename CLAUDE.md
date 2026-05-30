@@ -1,65 +1,88 @@
-# ContentAlchemy — AI Content Marketing Assistant
+# Content Assistant — AI Content Marketing Assistant
 ## Claude Code Project Context
 
-This file gives Claude Code full architectural context for building ContentAlchemy,
-a multi-agent AI content marketing system. Read this before generating any code.
+This file gives Claude Code full architectural context for the Content Assistant project.
+The codebase is **fully implemented**. Read this before modifying any code.
 
 ---
 
 ## Project Overview
 
-ContentAlchemy is a production-ready multi-agent system that automates content creation
+Content Assistant is a production-ready multi-agent system that automates content creation
 across multiple formats (research reports, SEO blogs, LinkedIn posts, AI images).
-It uses LangGraph for agent orchestration, OpenAI GPT-4 as the primary LLM, and
+It uses LangGraph for agent orchestration, OpenAI GPT-4o as the primary LLM, and
 Streamlit for the web interface.
+
+**Package name**: `ai-content-assistant` (Python package: `ai_content_assistant`)
+**Python version**: 3.13
+**Package manager**: UV (`uv sync --native-tls` to install, `uv run` to execute)
 
 ---
 
 ## Folder Structure
 
 ```
-contentalchemy/
-├── src/
+ik-cont-assistant/
+├── src/ai_content_assistant/
 │   ├── agents/
-│   │   ├── query_handler.py       # Routes requests to the right agent
-│   │   ├── research_agent.py      # Deep web research + analysis
-│   │   ├── blog_writer.py         # SEO-optimized long-form blog posts
-│   │   ├── linkedin_writer.py     # LinkedIn posts with hashtag strategy
+│   │   ├── query_handler.py       # Classifier and router — entry point for all requests
+│   │   ├── query_prompts.py       # System prompts for classification and follow-up detection
+│   │   ├── research_agent.py      # Web research via SERP + synthesis via GPT-4o
+│   │   ├── research_prompts.py    # Query extraction and synthesis prompts
+│   │   ├── blog_writer.py         # SEO-optimized blog posts (streamed, 2000+ words)
+│   │   ├── blog_prompts.py        # Blog generation and meta extraction prompts
+│   │   ├── linkedin_writer.py     # LinkedIn posts with tone variants + hashtags
+│   │   ├── linkedin_prompts.py    # Post, hashtag, and variants prompts
 │   │   ├── image_generator.py     # DALL-E 3 image generation + prompt optimization
-│   │   └── content_strategist.py  # Formats research into readable content
+│   │   ├── image_prompts.py       # Prompt optimizer system prompt
+│   │   ├── content_strategist.py  # Formats research into strategic content plans
+│   │   └── strategist_prompts.py  # Research formatting and content plan prompts
 │   ├── core/
-│   │   ├── config.py              # Centralized config, API keys, env loading
-│   │   ├── router.py              # LLM-based intent classification & routing
-│   │   └── workflow.py            # LangGraph graph definition & compilation
+│   │   ├── config.py              # Pydantic BaseSettings, env loading, logging config
+│   │   ├── router.py              # LangGraph conditional routing functions + error handler
+│   │   └── workflow.py            # process_request / stream_request Streamlit facades
 │   ├── integrations/
-│   │   ├── openai_client.py       # GPT-4 + DALL-E 3 wrapper with retry logic
-│   │   ├── serp_client.py         # SERP API wrapper for web search
+│   │   ├── openai_client.py       # GPT-4o + DALL-E 3 wrapper with retry and streaming
+│   │   ├── serp_client.py         # SERP API wrapper with TTL caching
 │   │   ├── perplexity_client.py   # Perplexity Sonar fallback research client
-│   │   └── image_clients.py       # Fallback image clients (Stability AI, etc.)
+│   │   └── image_clients.py       # Stability AI fallback image client
 │   ├── web_app/
-│   │   ├── streamlit_app.py       # Main Streamlit UI entry point
-│   │   ├── components/            # Reusable Streamlit UI components
-│   │   └── static/                # CSS, images, assets
+│   │   ├── streamlit_app.py       # Main Streamlit entry point
+│   │   ├── components/
+│   │   │   ├── sidebar.py         # Content type, tone, word count, keywords controls
+│   │   │   ├── chat_panel.py      # Chat history and input area
+│   │   │   └── content_preview.py # Generated content display + export buttons
+│   │   └── static/
+│   │       └── style.css
 │   ├── utils/
-│   │   ├── content_optimization.py # SEO scoring, keyword density, meta tags
-│   │   ├── quality_validation.py   # Content quality checks and scoring
-│   │   └── export_tools.py         # Export to markdown, PDF, etc.
+│   │   ├── content_optimization.py # Keyword density, readability scoring, meta generation
+│   │   ├── quality_validation.py   # Blog/LinkedIn validation + 0-100 quality score
+│   │   ├── guardrails.py           # Input length, PII detection, OpenAI moderation, image safety
+│   │   └── export_tools.py         # Export to Markdown (with frontmatter) or plain text
 │   └── workflow/
-│       ├── langgraph_workflow.py   # Full LangGraph StateGraph definition
-│       └── state_management.py    # Conversation memory and session state
+│       ├── langgraph_workflow.py   # LangGraph StateGraph definition, build_graph, run/stream
+│       └── state_management.py    # AgentState TypedDict, history reducer, helpers
 ├── tests/
 │   ├── unit/
+│   │   ├── agents/
+│   │   │   ├── test_query_handler.py
+│   │   │   └── test_blog_writer.py
+│   │   ├── utils/
+│   │   │   ├── test_quality_validation.py
+│   │   │   └── test_content_optimization.py
+│   │   ├── test_config.py
+│   │   └── test_state_management.py
 │   ├── integration/
+│   │   └── test_workflow.py        # Full LangGraph workflow with mocked APIs
 │   └── e2e/
+│       └── test_streamlit_smoke.py # Import, instantiation, and graph-build smoke tests
 ├── config/
 │   ├── development.yaml
 │   ├── production.yaml
-│   └── services.yaml
-├── docs/
-│   ├── architecture.md
-│   ├── api_documentation.md
-│   └── deployment_guide.md
-├── requirements.txt
+│   └── services.yaml               # API base URLs, model names, timeouts
+├── pyproject.toml                  # Project metadata + dependencies (managed by UV)
+├── uv.lock
+├── Dockerfile
 ├── docker-compose.yml
 ├── .env.example
 └── README.md
@@ -69,221 +92,248 @@ contentalchemy/
 
 ## The Six Agents
 
-Build each agent as a Python class with a consistent interface: `run(state: AgentState) -> AgentState`.
+All agents are Python classes with a consistent async interface: `run(state: AgentState) -> AgentState`.
 
 ### 1. Query Handler Agent (`query_handler.py`)
 - **Role**: Classifier and router — the entry point for all user requests
-- **Logic**: Uses GPT-4 with a classification prompt to detect intent
-- **Output**: Sets `state["next_agent"]` to one of: `research`, `blog`, `linkedin`, `image`, `strategy`
-- **Key method**: `classify_intent(user_message: str) -> str`
-- **Also handles**: Follow-up detection (is this a refinement of the last request?)
+- **Logic**: Uses `gpt-4o-mini` (JSON mode) to classify intent
+- **Output**: Sets `state["next_agent"]` to one of: `research`, `blog`, `linkedin`, `image`, `content_strategist`
+- **Key methods**: `classify_intent(user_message: str) -> str`, `detect_followup(state) -> bool`
+- **Also handles**: Follow-up detection — runs classification and follow-up check in parallel
 
 ### 2. Deep Research Agent (`research_agent.py`)
 - **Role**: Conducts web research and synthesizes findings
-- **Primary tool**: SERP API for Google search results
-- **Fallback tool**: Perplexity Sonar API
-- **Output**: Structured research report with sources, key findings, and summary
-- **Key methods**: `search(query: str)`, `synthesize(results: list) -> str`
-- **State fields it writes**: `state["research_output"]`, `state["sources"]`
+- **Primary tool**: SERP API; automatic fallback to Perplexity Sonar on exception
+- **Output**: Structured research report with sources
+- **Key methods**: `search(query: str) -> list[dict]`, `synthesize(query, results) -> str`
+- **State fields written**: `state["research_output"]`, `state["sources"]`
+- **Caching**: Synthesis results cached by MD5(query + URLs), 1-hour TTL, 200-entry max
+- **Follow-up behavior**: Reuses existing `research_output` when `is_followup=True`
 
 ### 3. SEO Blog Writer Agent (`blog_writer.py`)
-- **Role**: Creates long-form, search-optimized blog posts (1500–2500 words)
-- **Inputs**: Topic + optional research output from state
-- **SEO features**: Keyword placement in H1/H2, meta description generation, internal link suggestions
-- **Output format**: Markdown with frontmatter (title, meta_description, keywords, slug)
-- **Key methods**: `write_blog(topic: str, research: str) -> str`, `generate_meta(content: str) -> dict`
+- **Role**: Creates long-form, search-optimized blog posts (2000+ words)
+- **Inputs**: Topic + optional research output from state (first 3000 chars)
+- **Output format**: Streamed Markdown with YAML frontmatter (title, meta_description, keywords, slug)
+- **Key methods**: `write_blog(topic, research) -> AsyncIterator[str]`, `generate_meta(content) -> dict`
+- **Post-processing**: Validates blog, scores readability, adds metadata to state
 
 ### 4. LinkedIn Post Writer Agent (`linkedin_writer.py`)
-- **Role**: Creates engaging professional LinkedIn posts (150–300 words)
+- **Role**: Creates engaging professional LinkedIn posts (≤3000 chars)
 - **Style**: Hook in first line, value-driven body, CTA, 5–8 relevant hashtags
-- **Variations**: Can generate 3 tone variants (professional, conversational, thought-leadership)
-- **Key methods**: `write_post(topic: str, tone: str) -> str`, `generate_hashtags(topic: str) -> list`
+- **Tone variants**: Generates 3 variants (professional, conversational, casual) in one call
+- **Key methods**: `write_post(topic, tone) -> str`, `generate_hashtags(topic) -> list[str]`, `generate_variants(topic) -> dict`
+- **Parallelism**: All 3 tasks (post, hashtags, variants) run in parallel
 
 ### 5. Image Generation Agent (`image_generator.py`)
 - **Role**: Generates images via DALL-E 3 with optimized prompts
-- **Prompt optimization**: Uses GPT-4 to expand user intent into a detailed DALL-E prompt
-- **Fallback**: Stability AI API if DALL-E is unavailable
-- **Output**: Image URL or base64, plus the prompt used
-- **Key methods**: `optimize_prompt(user_intent: str) -> str`, `generate(prompt: str) -> dict`
+- **Prompt optimization**: Uses `gpt-4o-mini` to expand brief intent into detailed DALL-E prompt
+- **Fallback**: Stability AI if `STABILITY_API_KEY` is configured
+- **Key methods**: `optimize_prompt(user_intent) -> str`, `generate(prompt) -> dict`
+- **State fields written**: `state["metadata"]["image_url"]`, `state["metadata"]["prompt_used"]`, `state["metadata"]["image_source"]`
 
 ### 6. Content Strategist Agent (`content_strategist.py`)
 - **Role**: Formats and structures research into readable strategic content
-- **Use case**: When user wants a content plan, content calendar, or formatted report
-- **Output**: Structured markdown document with sections, key takeaways, and action items
-- **Key methods**: `format_research(raw: str) -> str`, `create_content_plan(topic: str) -> str`
+- **Use case**: Content plans, content calendars, formatted research reports
+- **Key methods**: `format_research(raw) -> str`, `create_content_plan(topic, research) -> str`
+- **Logic**: If `research_output` exists, formats it; otherwise creates a new content plan from scratch
 
 ---
 
 ## LangGraph Workflow
 
-Use `StateGraph` from `langgraph.graph`. The shared state is a TypedDict.
+`StateGraph` from `langgraph.graph`. Shared state is a `TypedDict` with a custom history reducer.
 
 ```python
-# src/workflow/langgraph_workflow.py — reference pattern
+# src/ai_content_assistant/workflow/state_management.py
 
-from langgraph.graph import StateGraph, END
-from typing import TypedDict, Optional, List
+from typing import TypedDict, Optional, Annotated, Literal
+
+ContentType = Literal["blog", "linkedin", "image", "research", "strategy"]
 
 class AgentState(TypedDict):
     user_message: str
-    conversation_history: List[dict]
+    conversation_history: Annotated[list[ConversationMessage], _merge_history]  # capped at 5
     next_agent: Optional[str]
     research_output: Optional[str]
-    sources: Optional[List[str]]
+    sources: Optional[list[str]]
     final_content: Optional[str]
-    content_type: Optional[str]       # "blog" | "linkedin" | "image" | "research" | "strategy"
+    content_type: Optional[ContentType]
     error: Optional[str]
-    metadata: Optional[dict]          # SEO meta, image URL, hashtags, etc.
-
-# Graph edges:
-# START -> query_handler -> [research | blog | linkedin | image | strategy | END]
-# research -> content_strategist (optional post-processing)
-# All terminal agents -> END
+    metadata: Optional[dict]   # SEO meta, image URL, hashtags, quality score, variants, etc.
 ```
 
-**Conditional routing** is done via `add_conditional_edges` based on `state["next_agent"]`.
+**Graph topology** (`langgraph_workflow.py`):
+```
+START → query_handler
+query_handler → (conditional) research | blog | linkedin | image | content_strategist | error_handler
+research → (conditional) content_strategist | END
+blog | linkedin | image | content_strategist | error_handler → END
+```
 
-**Error handling**: Wrap each agent's `run()` in try/except. On failure, set `state["error"]`
-and route to a graceful fallback response node.
+**Routing**: `route_after_query_handler()` and `route_after_research()` in `core/router.py`.
+**Error handling**: Every agent's `run()` is wrapped in `_make_node()` which catches all exceptions,
+sets `state["error"]`, and routes to `error_handler` which converts errors to user-friendly messages.
 
 ---
 
 ## Core Configuration (`src/core/config.py`)
 
-Load all secrets from environment variables. Never hardcode keys.
+All secrets loaded from environment variables via `pydantic-settings`. Never hardcode keys.
 
 ```python
-# Required env vars (see .env.example)
-OPENAI_API_KEY=
-SERP_API_KEY=
-PERPLEXITY_API_KEY=        # optional, fallback
-STABILITY_API_KEY=         # optional, fallback image generation
+class Settings(BaseSettings):
+    # Required
+    openai_api_key: str
+    serp_api_key: str
+
+    # Optional (fallbacks)
+    perplexity_api_key: Optional[str] = None
+    stability_api_key: Optional[str] = None
+
+    # Model routing (two-tier strategy)
+    default_model: str = "gpt-4o"          # heavy generation
+    fast_model: str = "gpt-4o-mini"        # classification, metadata, hashtags
+    image_model: str = "dall-e-3"
+
+    # Content generation defaults
+    max_research_results: int = 10
+    blog_target_word_count: int = 2000
+    linkedin_max_chars: int = 3000
+
+    # Guardrails
+    max_input_length: int = 2000
+    max_requests_per_hour: int = 20
+
+    env: str = "development"
+    log_level: str = "INFO"
 ```
 
-Provide a `Settings` dataclass (or Pydantic BaseSettings) with sensible defaults:
-- `DEFAULT_MODEL = "gpt-4-turbo-preview"`
-- `IMAGE_MODEL = "dall-e-3"`
-- `MAX_RESEARCH_RESULTS = 10`
-- `BLOG_TARGET_WORD_COUNT = 2000`
-- `LINKEDIN_MAX_CHARS = 3000`
+Module-level singleton: `settings = Settings()` — import this everywhere, don't re-instantiate.
 
 ---
 
 ## Integration Clients
 
+All clients expose module-level singletons (e.g., `openai_client`, `serp_client`).
+
 ### OpenAI Client (`openai_client.py`)
-- Wrap `openai.ChatCompletion.create` and `openai.Image.generate`
-- Add exponential backoff retry (3 attempts) for rate limit errors
-- Log token usage per call for cost tracking
+- `chat_complete(messages, model, temperature, max_tokens, json_mode) -> tuple[str, dict]`
+- `chat_stream(messages, model, max_tokens) -> AsyncIterator[str]`
+- `generate_image(prompt, size, quality) -> dict`
+- Retry: `@retry` from `tenacity`, 3 attempts, exponential backoff on `RateLimitError`
+- Logs token usage per call
 
 ### SERP Client (`serp_client.py`)
-- Use `serpapi` Python package or direct HTTP to `https://serpapi.com/search`
-- Return structured list: `[{title, url, snippet}]`
-- Cache results in memory (TTL 1 hour) to reduce API calls
+- `search(query, num_results) -> list[dict]` — returns `[{title, url, snippet}]`
+- TTL cache: 1-hour, 100-entry max, keyed by MD5(query:num_results)
 
 ### Perplexity Client (`perplexity_client.py`)
-- Use Perplexity's OpenAI-compatible API endpoint
-- Model: `"sonar-pro"` for research queries
-- Returns cited response — extract and preserve source URLs
+- `research(query) -> tuple[str, list[str]]` — returns `(answer_text, source_urls)`
+- Uses `sonar-pro` model via Perplexity's OpenAI-compatible endpoint
+- Gracefully returns `("", [])` if `PERPLEXITY_API_KEY` is not set
+
+### Stability AI Client (`image_clients.py`)
+- `generate(prompt, width, height) -> str` — returns base64-encoded PNG
+- Raises `RuntimeError` if `STABILITY_API_KEY` is not configured
+
+---
+
+## Guardrails (`src/utils/guardrails.py`)
+
+Called from `streamlit_app.py` before every request and from `image_generator.py` before generation.
+
+- `check_input_length(text)` — raises `InputTooLongError` if `len > max_input_length`
+- `detect_pii(text) -> list[str]` — regex detection for email, phone, SSN, credit card (non-raising)
+- `check_moderation(text)` / `async_check_moderation(text)` — OpenAI Moderation API, raises `ContentFlaggedError`
+- `check_image_prompt(prompt)` — deny-list keyword check, raises `ImageSafetyError`
 
 ---
 
 ## Content Optimization (`src/utils/content_optimization.py`)
 
-Implement these functions:
-- `calculate_keyword_density(text: str, keyword: str) -> float` — target 1–3%
-- `generate_meta_description(content: str) -> str` — max 160 chars, uses GPT-4
-- `suggest_headings(content: str) -> list` — H2/H3 structure suggestions
-- `score_readability(text: str) -> dict` — Flesch-Kincaid grade, avg sentence length
+- `calculate_keyword_density(text, keyword) -> float` — keyword frequency as % of word count
+- `score_readability(text) -> dict` — `{flesch_kincaid_grade, avg_sentence_length}`
+- `suggest_headings(content) -> list[str]` — extracts existing H2/H3 headings
+- `generate_meta_description(content, keyword) -> str` — async, gpt-4o-mini, max 160 chars
 
 ## Quality Validation (`src/utils/quality_validation.py`)
 
-Implement:
-- `validate_blog(content: str) -> dict` — checks word count, heading structure, meta presence
-- `validate_linkedin(content: str) -> dict` — checks length, hashtag count, hook strength
-- `score_content(content: str, content_type: str) -> int` — 0–100 quality score
+- `validate_blog(content) -> dict` — `{passed, score, issues}` — checks word count (1500+), H1, H2s (3+), frontmatter
+- `validate_linkedin(content) -> dict` — `{passed, score, issues}` — checks length (≤3000), hashtags (5–8), hook
+- `score_content(content, content_type) -> int` — 0–100 quality score
 
 ---
 
 ## Streamlit UI (`src/web_app/streamlit_app.py`)
 
-Layout:
-- **Sidebar**: Content type selector, settings (tone, word count, target keywords)
-- **Main area**: Chat interface (messages history) + content preview panel side-by-side
-- **Bottom**: Input box + Submit button
+Layout: sidebar (settings) + two-column (chat history | content preview).
 
-State management: Use `st.session_state` for conversation history and generated content.
-
-Key UI flows:
-1. User types request → routed through LangGraph → result displayed in preview panel
-2. User can click "Refine" to send follow-up with context preserved
-3. Export buttons: Copy to clipboard, Download as .md or .txt
+- **Input validation**: `_validate_input()` runs guardrails + rate limiting before every submit
+- **Workflow execution**: `_run_workflow()` calls `stream_request()` via `asyncio.run_coroutine_threadsafe`; streams `(node_name, delta)` to `st.status()` for live progress
+- **Preview panel**: Quality score badge, source links, LinkedIn tone variants, export buttons (.md + .txt)
+- **State management**: `st.session_state` for messages, agent_history, current_state, tone, word_count, keywords
 
 ---
 
 ## Coding Standards
 
-- **Python 3.11+**
-- **Type hints everywhere** — use `TypedDict`, `Optional`, `List` from `typing`
-- **Async where possible** — use `async/await` for all API calls
-- **Logging**: Use Python's `logging` module, not `print()`. Log at DEBUG for API calls, INFO for agent transitions, ERROR for failures
-- **Docstrings**: Every class and public method needs a one-line docstring
+- **Python 3.13**
+- **Type hints everywhere** — use `TypedDict`, `Optional`, `Annotated` from `typing`
+- **Async for all API calls** — use `async/await`
+- **Logging**: `logging` module only. DEBUG for API calls, INFO for agent transitions, ERROR for failures
+- **Docstrings**: One-line docstring on every class and public method
 - **Error messages**: Always include the agent name and operation in error strings
-- **No hardcoded strings**: All prompts go in a `prompts/` dict or separate `prompts.py` file per agent
+- **Prompts**: All system prompts live in companion `*_prompts.py` files per agent, not inline
 
 ---
 
 ## Prompt Engineering Guidelines
 
-Structure all agent prompts with:
+All agent prompts follow this structure:
 1. **Role**: "You are an expert [role]..."
 2. **Task**: Clear description of what to produce
 3. **Constraints**: Format, length, tone, platform rules
-4. **Output format**: Specify exact structure (markdown, JSON, etc.)
+4. **Output format**: Specify exact structure (Markdown, JSON, etc.)
 
-For the Query Handler classifier prompt, use few-shot examples covering edge cases
-(e.g., "write me something about AI" → ambiguous, ask for clarification).
+Prompts are stored as module-level string constants in `*_prompts.py` companion files.
+Never inline prompts in agent `run()` methods.
 
 ---
 
 ## Testing Approach
 
-- **Unit tests**: Each agent's core method with mocked API calls
-- **Integration tests**: Full LangGraph workflow with mock LLM responses
-- **E2E tests**: Streamlit app smoke test via `streamlit.testing`
-- Target **80%+ coverage**
+- **Unit tests** (22 tests): Core config, state management, 2 agents, 2 utility modules — all with mocked API calls
+- **Integration tests** (3 tests): Full LangGraph workflow with mocked LLM and SERP clients
+- **E2E tests** (3 tests): Streamlit import smoke tests + graph compilation check
+- **Total: 28 tests**
+
+```bash
+# All tests with coverage
+uv run pytest tests/ --cov=src/ai_content_assistant --cov-report=term-missing
+
+# Unit tests only
+uv run pytest tests/unit/ -v
+
+# Integration tests (mocked APIs)
+uv run pytest tests/integration/ -v
+```
+
+**Not yet covered by unit tests**: LinkedInWriter, ImageGenerator, ContentStrategist, ResearchAgent,
+integration clients, guardrails, export tools. These are covered only at integration/e2e level.
 
 ---
 
-## Dependencies (requirements.txt)
+## Dependencies (`pyproject.toml`)
 
 ```
-langgraph>=0.1.0
-langchain>=0.2.0
-openai>=1.0.0
-streamlit>=1.35.0
-serpapi>=0.1.5
-httpx>=0.27.0
-pydantic>=2.0.0
-python-dotenv>=1.0.0
-tenacity>=8.2.0        # retry logic
-pytest>=8.0.0
-pytest-asyncio>=0.23.0
+langgraph, langchain, langchain-openai
+openai
+streamlit
+google-search-results      # serpapi
+httpx
+pydantic, pydantic-settings
+python-dotenv, pyyaml
+tenacity                   # retry logic
+cachetools                 # TTL cache for SERP and synthesis results
+pytest, pytest-asyncio, pytest-cov, ruff  (dev)
 ```
-
----
-
-## Where to Start
-
-Generate code in this order:
-1. `src/core/config.py` — Settings and env loading
-2. `src/workflow/state_management.py` — AgentState TypedDict
-3. `src/integrations/openai_client.py` — Core LLM wrapper
-4. `src/agents/query_handler.py` — Routing logic
-5. `src/agents/research_agent.py` — Research capability
-6. `src/agents/blog_writer.py` — Blog generation
-7. `src/agents/linkedin_writer.py` — LinkedIn posts
-8. `src/agents/image_generator.py` — Image generation
-9. `src/agents/content_strategist.py` — Strategy formatting
-10. `src/workflow/langgraph_workflow.py` — Wire everything together
-11. `src/web_app/streamlit_app.py` — UI layer last
