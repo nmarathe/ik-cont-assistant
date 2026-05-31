@@ -19,10 +19,19 @@ class BlogWriter:
     """Generates SEO-optimized blog posts; uses streaming for long output."""
 
     async def write_blog(
-        self, topic: str, research: Optional[str] = None
+        self,
+        topic: str,
+        research: Optional[str] = None,
+        word_count: Optional[int] = None,
+        tone: str = "professional",
+        keywords: str = "",
     ) -> AsyncIterator[str]:
         """Yield streamed Markdown chunks for the blog post."""
-        system = BLOG_SYSTEM.format(word_count=settings.blog_target_word_count)
+        system = BLOG_SYSTEM.format(
+            word_count=word_count or settings.blog_target_word_count,
+            tone=tone,
+            keywords=keywords or "(none specified — choose appropriate keywords for the topic)",
+        )
         user_content = f"Topic: {topic}"
         if research:
             user_content += f"\n\nResearch context:\n{research[:3000]}"
@@ -58,10 +67,23 @@ class BlogWriter:
     async def run(self, state: AgentState) -> AgentState:
         """Generate blog post, collect streamed output, attach metadata."""
         topic = state["user_message"]
-        logger.info("BlogWriter generating post for: %s", topic[:80])
+        meta_in = state.get("metadata") or {}
+        word_count = meta_in.get("word_count")
+        tone = meta_in.get("tone", "professional")
+        keywords = meta_in.get("keywords", "")
+        logger.info(
+            "BlogWriter generating post for: %s (words=%s, tone=%s, keywords=%r)",
+            topic[:80], word_count, tone, keywords[:60],
+        )
 
         chunks: list[str] = []
-        async for chunk in self.write_blog(topic, state.get("research_output")):
+        async for chunk in self.write_blog(
+            topic,
+            state.get("research_output"),
+            word_count=word_count,
+            tone=tone,
+            keywords=keywords,
+        ):
             chunks.append(chunk)
         blog_content = "".join(chunks)
 

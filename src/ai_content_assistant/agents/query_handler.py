@@ -87,10 +87,17 @@ class QueryHandler:
     async def run(self, state: AgentState) -> AgentState:
         """Classify intent, detect follow-ups, set next_agent and content_type."""
         logger.info("QueryHandler processing: %s", state["user_message"][:80])
-        intent, is_followup = await asyncio.gather(
-            self.classify_intent(state["user_message"]),
-            self.detect_followup(state),
-        )
+
+        hint = (state.get("metadata") or {}).get("content_type_hint", "")
+        if hint in _VALID_AGENTS:
+            intent = hint
+            is_followup = await self.detect_followup(state)
+            logger.info("QueryHandler honoring sidebar hint: %s", intent)
+        else:
+            intent, is_followup = await asyncio.gather(
+                self.classify_intent(state["user_message"]),
+                self.detect_followup(state),
+            )
 
         # Resolve follow-up references so downstream agents get a self-contained message
         user_message = state["user_message"]

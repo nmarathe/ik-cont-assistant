@@ -85,11 +85,26 @@ Open `http://localhost:8501` in your browser.
 
 | Request | Agent Triggered | Output |
 |---------|----------------|--------|
-| `Research AI trends in 2025` | Research Agent | Structured report with sources |
-| `Write a blog post about machine learning for beginners` | Blog Writer | 2000-word SEO blog with frontmatter |
+| `Research AI trends in 2025` | Research Agent | Structured report with sources (rendered as final content) |
+| `Write a blog post about machine learning for beginners` | Blog Writer | SEO blog with frontmatter (length, tone, keywords configurable from sidebar) |
 | `Create a LinkedIn post about my product launch` | LinkedIn Writer | Post + 3 tone variants + hashtags |
 | `Generate an image of a futuristic office` | Image Generator | AI-generated image |
 | `Create a content calendar for Q3` | Content Strategist | 4-week content plan |
+
+---
+
+## Sidebar Controls
+
+The Streamlit sidebar exposes four controls that influence routing and generation:
+
+| Control | Effect | Agents that use it |
+|---------|--------|--------------------|
+| **Content Type** | When set to a specific type (Research / Blog Post / LinkedIn Post / Image / Content Strategy), bypasses LLM intent classification and routes directly to that agent. `Auto-detect` defers to the classifier. | Query Handler (routing) |
+| **Tone** | `formal` / `professional` / `conversational` / `casual` — applied to generated copy. | Blog Writer, LinkedIn Writer |
+| **Target Word Count (Blog)** | Target length for blog posts (500–5000, default 2000). | Blog Writer |
+| **Target Keywords** | Comma-separated keywords woven into blog copy and frontmatter. | Blog Writer |
+
+Image, Research, and Content Strategist agents don't consume the tone/word-count/keywords controls — those settings only apply to the formats where they make sense.
 
 ---
 

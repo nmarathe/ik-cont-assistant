@@ -93,4 +93,10 @@ class ResearchAgent:
         sources = [r.get("url", "") for r in results if r.get("url")]
         report = await self.synthesize(query, results)
 
-        return {**state, "research_output": report, "sources": sources}
+        return {
+            **state,
+            "research_output": report,
+            "sources": sources,
+            "final_content": report,
+            "content_type": "research",
+        }
