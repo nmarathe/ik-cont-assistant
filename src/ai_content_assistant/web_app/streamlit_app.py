@@ -90,7 +90,11 @@ def _validate_input(text: str) -> bool:
 
 
 def _run_workflow(user_message: str) -> dict:
-    """Run the async workflow in a dedicated thread; stream per-node progress."""
+    """Run the async workflow in a dedicated thread; stream per-node progress.
+
+    Renders live progress into whatever container is active when called, so the
+    caller can place it inside the Content Preview column.
+    """
     result_queue: queue_module.Queue = queue_module.Queue()
     session_copy = dict(st.session_state)
 
@@ -104,16 +108,80 @@ def _run_workflow(user_message: str) -> dict:
     threading.Thread(target=lambda: asyncio.run(_collect()), daemon=True).start()
 
     final_state: dict = {}
-    with st.status("Processing your request…") as status:
+    with st.status("Generating your content…", expanded=True) as status:
+        steps_seen: set[str] = set()
         while True:
             msg = result_queue.get(timeout=120)
             if msg[0] == "done":
                 final_state = msg[2]
-                status.update(label="Done!", state="complete")
+                status.update(label="✅ Done!", state="complete", expanded=False)
                 break
             _, node_name, _ = msg
-            status.update(label=f"Running: {node_name.replace('_', ' ').title()}…")
+            label = node_name.replace("_", " ").title()
+            if node_name not in steps_seen:
+                steps_seen.add(node_name)
+                st.write(f"⏳ {label}…")
+            status.update(label=f"Running: {label}…")
     return final_state
+
+
+def _render_preview_panel(state: dict | None) -> None:
+    """Render the Content Preview column for an existing (completed) result."""
+    meta = (state or {}).get("metadata") or {}
+    image_url = meta.get("image_url") or ""
+    if image_url.startswith("data:image"):
+        import base64 as _b64
+
+        st.subheader("Content Preview")
+        try:
+            img_bytes = _b64.b64decode(image_url.split(",", 1)[1])
+            st.image(
+                img_bytes,
+                caption=f"Generated via {meta.get('image_source', 'gpt-image-1')}",
+                use_container_width=True,
+            )
+        except Exception as exc:
+            st.warning(f"Could not render image: {exc}")
+        if meta.get("prompt_used"):
+            with st.expander("🔍 Prompt used"):
+                st.text(meta["prompt_used"])
+    else:
+        render_preview(state)
+
+
+def _record_response(user_input: str, result: dict) -> None:
+    """Append the assistant turn to chat + agent history after a successful run."""
+    assistant_msg = (
+        result.get("final_content")
+        or "I couldn't generate a response. Please try again."
+    )
+    if result.get("content_type") == "image":
+        preview_msg = (
+            "✅ Image generated! See the preview panel →\n\n"
+            f"*Prompt used:* {(result.get('metadata') or {}).get('prompt_used', '')[:100]}"
+        )
+    else:
+        preview_msg = assistant_msg[:300] + ("…" if len(assistant_msg) > 300 else "")
+
+    st.session_state.messages.append({"role": "assistant", "content": preview_msg})
+
+    agent_hist = append_to_history(
+        {
+            "conversation_history": st.session_state.agent_history,
+            "user_message": user_input,
+            "next_agent": None,
+            "research_output": None,
+            "sources": None,
+            "final_content": None,
+            "content_type": None,
+            "error": None,
+            "metadata": None,
+        },
+        "user",
+        user_input,
+    )
+    agent_hist = append_to_history(agent_hist, "assistant", assistant_msg[:500])
+    st.session_state.agent_history = agent_hist["conversation_history"]
 
 
 def main() -> None:
@@ -142,83 +210,32 @@ def main() -> None:
         render_chat_history(st.session_state.messages)
         user_input = render_input_area()
 
-    with preview_col:
-        _state = st.session_state.current_state
-        _meta = (_state or {}).get("metadata") or {}
-        _image_url = _meta.get("image_url") or ""
-        if _image_url.startswith("data:image"):
-            import base64 as _b64
+    # Decide up front whether this run processes a new request, so the preview
+    # column can clear stale content and show live progress instead.
+    pending = bool(user_input)
+    process_now = False
+    if pending:
+        st.session_state.messages.append({"role": "user", "content": user_input})
+        process_now = _validate_input(user_input)
 
+    with preview_col:
+        if process_now:
+            # New request: replace the previous result with live progress.
             st.subheader("Content Preview")
             try:
-                _img_bytes = _b64.b64decode(_image_url.split(",", 1)[1])
-                st.image(
-                    _img_bytes,
-                    caption=f"Generated via {_meta.get('image_source', 'gpt-image-1')}",
-                    use_container_width=True,
+                result = _run_workflow(user_input)
+                st.session_state.current_state = result
+                _record_response(user_input, result)
+            except Exception as exc:
+                logger.error("Workflow error: %s", exc, exc_info=True)
+                st.session_state.messages.append(
+                    {"role": "assistant", "content": f"An error occurred: {exc}"}
                 )
-            except Exception as _exc:
-                st.warning(f"Could not render image: {_exc}")
-            if _meta.get("prompt_used"):
-                with st.expander("🔍 Prompt used"):
-                    st.text(_meta["prompt_used"])
         else:
-            render_preview(_state)
+            _render_preview_panel(st.session_state.current_state)
 
-    # Process new input
-    if user_input:
-        st.session_state.messages.append({"role": "user", "content": user_input})
-
-        if not _validate_input(user_input):
-            st.rerun()
-
-        try:
-            result = _run_workflow(user_input)
-            st.session_state.current_state = result
-
-            # Add assistant response to chat
-            assistant_msg = (
-                result.get("final_content")
-                or "I couldn't generate a response. Please try again."
-            )
-            # For non-image content, show a short preview in chat
-            if result.get("content_type") == "image":
-                preview_msg = f"✅ Image generated! See the preview panel →\n\n*Prompt used:* {(result.get('metadata') or {}).get('prompt_used', '')[:100]}"
-            else:
-                preview_msg = assistant_msg[:300] + (
-                    "…" if len(assistant_msg) > 300 else ""
-                )
-
-            st.session_state.messages.append(
-                {"role": "assistant", "content": preview_msg}
-            )
-
-            # Update agent conversation history (last 5)
-            agent_hist = append_to_history(
-                {
-                    "conversation_history": st.session_state.agent_history,
-                    "user_message": user_input,
-                    "next_agent": None,
-                    "research_output": None,
-                    "sources": None,
-                    "final_content": None,
-                    "content_type": None,
-                    "error": None,
-                    "metadata": None,
-                },
-                "user",
-                user_input,
-            )
-            agent_hist = append_to_history(agent_hist, "assistant", assistant_msg[:500])
-            st.session_state.agent_history = agent_hist["conversation_history"]
-
-        except Exception as exc:
-            logger.error("Workflow error: %s", exc, exc_info=True)
-            error_msg = f"An error occurred: {exc}"
-            st.session_state.messages.append(
-                {"role": "assistant", "content": error_msg}
-            )
-
+    # Rerun after handling a submission so chat history + input box refresh.
+    if pending:
         st.rerun()
 
 
