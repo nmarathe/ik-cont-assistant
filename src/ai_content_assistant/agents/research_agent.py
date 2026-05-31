@@ -93,10 +93,13 @@ class ResearchAgent:
         sources = [r.get("url", "") for r in results if r.get("url")]
         report = await self.synthesize(query, results)
 
+        # Preserve a "strategy" request so route_after_research forwards these
+        # findings to the content strategist; otherwise this is the final output.
+        content_type = "strategy" if state.get("content_type") == "strategy" else "research"
         return {
             **state,
             "research_output": report,
             "sources": sources,
             "final_content": report,
-            "content_type": "research",
+            "content_type": content_type,
         }

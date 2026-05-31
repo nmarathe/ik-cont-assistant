@@ -50,6 +50,31 @@ async def test_blog_writer_populates_final_content(writer):
     assert result["metadata"]["title"] == "Test"
 
 
+@pytest.mark.parametrize("tone", ["formal", "professional", "conversational", "casual"])
+async def test_blog_writer_uses_every_tone(writer, tone):
+    """Every Tone selector value must be injected into the blog system prompt."""
+    captured: dict = {}
+
+    async def _capture_stream(messages, model=None, max_tokens=None):
+        captured["system"] = messages[0]["content"]
+        yield _SAMPLE_BLOG
+
+    with patch(
+        "ai_content_assistant.agents.blog_writer.openai_client.chat_stream",
+        side_effect=_capture_stream,
+    ), patch(
+        "ai_content_assistant.agents.blog_writer.openai_client.chat_complete",
+        new_callable=AsyncMock,
+        return_value=(json.dumps({"title": "T", "meta_description": "d", "keywords": ["ai"], "slug": "t"}), {}),
+    ):
+        state = create_initial_state("Write a blog about AI")
+        state["metadata"] = {"tone": tone, "word_count": 1500, "keywords": "ai"}
+        result = await writer.run(state)
+
+    assert f"Tone: {tone}" in captured["system"]
+    assert result["final_content"]
+
+
 async def test_blog_writer_generates_meta(writer):
     with patch(
         "ai_content_assistant.agents.blog_writer.openai_client.chat_complete",

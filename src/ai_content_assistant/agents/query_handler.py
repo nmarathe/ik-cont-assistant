@@ -109,8 +109,9 @@ class QueryHandler:
                 user_message[:60],
             )
 
-        # Map strategy intent to content_strategist node
-        next_agent = "content_strategist" if intent == "strategy" else intent
+        # Strategy runs research first; route_after_research then hands the findings
+        # to content_strategist (keyed off content_type=="strategy") to format a plan.
+        next_agent = "research" if intent == "strategy" else intent
         logger.info(
             "QueryHandler → next_agent=%s is_followup=%s", next_agent, is_followup
         )

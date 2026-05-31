@@ -45,6 +45,18 @@ def route_after_research(state: AgentState) -> str:
     return END
 
 
+def route_after_agent(state: AgentState) -> str:
+    """Route a terminal agent to error_handler if it set state['error'], else END.
+
+    Without this check, an exception caught by _make_node leaves the workflow
+    ending at the agent node with final_content=None, and the UI shows a
+    generic 'couldn't generate' fallback instead of the real error.
+    """
+    if state.get("error"):
+        return "error_handler"
+    return END
+
+
 def handle_error(state: AgentState) -> AgentState:
     """Format errors into a user-friendly final_content message.
 

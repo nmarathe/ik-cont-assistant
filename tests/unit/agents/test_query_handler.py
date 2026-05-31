@@ -49,9 +49,12 @@ async def test_run_sets_next_agent(handler, mock_chat_complete):
     assert result["content_type"] == "linkedin"
 
 
-async def test_run_maps_strategy_to_content_strategist(handler, mock_chat_complete):
+async def test_run_routes_strategy_through_research(handler, mock_chat_complete):
+    # Strategy is research-backed: query_handler sends it to research first, and
+    # route_after_research forwards the findings to content_strategist (keyed off
+    # content_type=="strategy").
     mock_chat_complete.return_value = (json.dumps({"intent": "strategy"}), {})
     state = create_initial_state("Create a content calendar")
     result = await handler.run(state)
-    assert result["next_agent"] == "content_strategist"
+    assert result["next_agent"] == "research"
     assert result["content_type"] == "strategy"

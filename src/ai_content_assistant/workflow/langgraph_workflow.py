@@ -13,6 +13,7 @@ from ai_content_assistant.agents.query_handler import QueryHandler
 from ai_content_assistant.agents.research_agent import ResearchAgent
 from ai_content_assistant.core.router import (
     handle_error,
+    route_after_agent,
     route_after_query_handler,
     route_after_research,
 )
@@ -23,19 +24,34 @@ logger = logging.getLogger(__name__)
 _compiled_graph: Optional[object] = None
 
 
+_TERMINAL_AGENTS = {"BlogWriter", "LinkedInWriter", "ImageGenerator", "ContentStrategist"}
+
+
 def _make_node(agent_instance):
-    """Wrap an agent's run() in a try/except that sets state['error'] on failure."""
+    """Wrap an agent's run() in a try/except that sets state['error'] on failure.
+
+    Also detects 'silent' failures: terminal content agents that returned without
+    setting final_content. Without this, an empty output would skip error_handler
+    and show the user a generic 'couldn't generate' fallback.
+    """
+    agent_name = type(agent_instance).__name__
 
     async def node(state: AgentState) -> AgentState:
         try:
-            return await agent_instance.run(state)
+            result = await agent_instance.run(state)
         except Exception as exc:
-            logger.error(
-                "%s failed: %s", type(agent_instance).__name__, exc, exc_info=True
-            )
+            logger.error("%s failed: %s", agent_name, exc, exc_info=True)
             return {**state, "error": f"{type(exc).__name__}: {exc}"}
 
-    node.__name__ = type(agent_instance).__name__
+        if agent_name in _TERMINAL_AGENTS and not (result.get("final_content") or "").strip():
+            logger.warning("%s returned empty final_content", agent_name)
+            return {
+                **result,
+                "error": f"{agent_name} produced no content. The model may have returned an empty response — please try again.",
+            }
+        return result
+
+    node.__name__ = agent_name
     return node
 
 
@@ -87,9 +103,16 @@ def build_graph():
         },
     )
 
-    # Terminal nodes
-    for node in ("blog", "linkedin", "image", "content_strategist", "error_handler"):
-        graph.add_edge(node, END)
+    # Terminal agent nodes: route to error_handler if they set state['error'],
+    # otherwise END. Without this, agent exceptions caught by _make_node would
+    # silently terminate the graph and the UI would show only a generic fallback.
+    for node in ("blog", "linkedin", "image", "content_strategist"):
+        graph.add_conditional_edges(
+            node,
+            route_after_agent,
+            {"error_handler": "error_handler", END: END},
+        )
+    graph.add_edge("error_handler", END)
 
     return graph.compile()
 
