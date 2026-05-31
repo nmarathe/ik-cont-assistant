@@ -33,7 +33,7 @@ User → Streamlit UI → LangGraph Workflow
 | Language Model | OpenAI GPT-4o | Claude Sonnet, Gemini | Content generation |
 | Fast Model | GPT-4o-mini | — | Classification, metadata |
 | Research Engine | SERP API | Perplexity Sonar | Web search |
-| Image Generation | DALL-E 3 | Stability AI | Visual content |
+| Image Generation | gpt-image-1 | DALL-E 3, Stability AI | Visual content |
 | Web Interface | Streamlit | Gradio, React | User interaction |
 | Package Manager | UV | pip, Poetry | Dependency management |
 
@@ -59,7 +59,8 @@ cp .env.example .env
 # Edit .env with your API keys
 
 # 3. Install dependencies
-uv sync --native-tls
+uv sync
+# On corporate networks with SSL inspection, use: uv sync --native-tls
 
 # 4. Launch the app
 uv run streamlit run src/ai_content_assistant/web_app/streamlit_app.py
@@ -87,7 +88,7 @@ Open `http://localhost:8501` in your browser.
 | `Research AI trends in 2025` | Research Agent | Structured report with sources |
 | `Write a blog post about machine learning for beginners` | Blog Writer | 2000-word SEO blog with frontmatter |
 | `Create a LinkedIn post about my product launch` | LinkedIn Writer | Post + 3 tone variants + hashtags |
-| `Generate an image of a futuristic office` | Image Generator | DALL-E 3 image |
+| `Generate an image of a futuristic office` | Image Generator | AI-generated image |
 | `Create a content calendar for Q3` | Content Strategist | 4-week content plan |
 
 ---
@@ -165,7 +166,7 @@ The app will be available at `http://localhost:8501`.
 | `httpx.ConnectError` on SERP | Network/key issue | Verify `SERP_API_KEY`; Perplexity auto-activates as fallback |
 | `openai.RateLimitError` | API quota | Retry is automatic (3 attempts); check OpenAI usage dashboard |
 | `uv sync` SSL error | Corporate proxy/cert | Add `--native-tls` flag: `uv sync --native-tls` |
-| Image URL expired | DALL-E URLs expire | Regenerate the image (URLs valid for ~1 hour) |
+| Image URL expired | DALL-E 3 URLs expire | Regenerate the image (URLs valid for ~1 hour); `gpt-image-1` returns base64 data instead |
 
 ---
 
@@ -181,7 +182,7 @@ src/ai_content_assistant/
 └── workflow/            AgentState TypedDict + LangGraph graph
 
 config/                  Per-environment YAML config + services.yaml (API URLs, timeouts)
-tests/                   Unit (22), integration (3), and e2e smoke (3) test suites
+tests/                   Unit (25), integration (3), and e2e smoke (3) test suites
 pyproject.toml           Project metadata + dependencies (managed by UV)
 Dockerfile               Multi-stage production container image
 docker-compose.yml       Single-command deployment

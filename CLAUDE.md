@@ -15,7 +15,7 @@ Streamlit for the web interface.
 
 **Package name**: `ai-content-assistant` (Python package: `ai_content_assistant`)
 **Python version**: 3.13
-**Package manager**: UV (`uv sync --native-tls` to install, `uv run` to execute)
+**Package manager**: UV (`uv sync` to install, `uv run` to execute)
 
 ---
 
@@ -33,7 +33,7 @@ ik-cont-assistant/
 │   │   ├── blog_prompts.py        # Blog generation and meta extraction prompts
 │   │   ├── linkedin_writer.py     # LinkedIn posts with tone variants + hashtags
 │   │   ├── linkedin_prompts.py    # Post, hashtag, and variants prompts
-│   │   ├── image_generator.py     # DALL-E 3 image generation + prompt optimization
+│   │   ├── image_generator.py     # Image generation (gpt-image-1) + prompt optimization
 │   │   ├── image_prompts.py       # Prompt optimizer system prompt
 │   │   ├── content_strategist.py  # Formats research into strategic content plans
 │   │   └── strategist_prompts.py  # Research formatting and content plan prompts
@@ -42,7 +42,7 @@ ik-cont-assistant/
 │   │   ├── router.py              # LangGraph conditional routing functions + error handler
 │   │   └── workflow.py            # process_request / stream_request Streamlit facades
 │   ├── integrations/
-│   │   ├── openai_client.py       # GPT-4o + DALL-E 3 wrapper with retry and streaming
+│   │   ├── openai_client.py       # GPT-4o + gpt-image-1 wrapper with retry and streaming
 │   │   ├── serp_client.py         # SERP API wrapper with TTL caching
 │   │   ├── perplexity_client.py   # Perplexity Sonar fallback research client
 │   │   └── image_clients.py       # Stability AI fallback image client
@@ -80,11 +80,17 @@ ik-cont-assistant/
 │   ├── development.yaml
 │   ├── production.yaml
 │   └── services.yaml               # API base URLs, model names, timeouts
+├── scripts/
+│   └── export_win_certs.py         # Windows SSL certificate export helper
+├── certs/
+│   └── ca_bundle.pem               # Exported CA bundle for SSL verification
 ├── pyproject.toml                  # Project metadata + dependencies (managed by UV)
 ├── uv.lock
+├── .python-version                 # Pins Python 3.13
+├── .env.example
+├── .gitignore
 ├── Dockerfile
 ├── docker-compose.yml
-├── .env.example
 └── README.md
 ```
 
@@ -125,8 +131,8 @@ All agents are Python classes with a consistent async interface: `run(state: Age
 - **Parallelism**: All 3 tasks (post, hashtags, variants) run in parallel
 
 ### 5. Image Generation Agent (`image_generator.py`)
-- **Role**: Generates images via DALL-E 3 with optimized prompts
-- **Prompt optimization**: Uses `gpt-4o-mini` to expand brief intent into detailed DALL-E prompt
+- **Role**: Generates images via `gpt-image-1` (default) or DALL-E 3 with optimized prompts
+- **Prompt optimization**: Uses `gpt-4o-mini` to expand brief intent into detailed image prompt
 - **Fallback**: Stability AI if `STABILITY_API_KEY` is configured
 - **Key methods**: `optimize_prompt(user_intent) -> str`, `generate(prompt) -> dict`
 - **State fields written**: `state["metadata"]["image_url"]`, `state["metadata"]["prompt_used"]`, `state["metadata"]["image_source"]`
@@ -193,7 +199,7 @@ class Settings(BaseSettings):
     # Model routing (two-tier strategy)
     default_model: str = "gpt-4o"          # heavy generation
     fast_model: str = "gpt-4o-mini"        # classification, metadata, hashtags
-    image_model: str = "dall-e-3"
+    image_model: str = "gpt-image-1"
 
     # Content generation defaults
     max_research_results: int = 10
@@ -219,7 +225,8 @@ All clients expose module-level singletons (e.g., `openai_client`, `serp_client`
 ### OpenAI Client (`openai_client.py`)
 - `chat_complete(messages, model, temperature, max_tokens, json_mode) -> tuple[str, dict]`
 - `chat_stream(messages, model, max_tokens) -> AsyncIterator[str]`
-- `generate_image(prompt, size, quality) -> dict`
+- `generate_image(prompt, size, quality) -> dict` — handles both `gpt-image-1` (base64) and `dall-e-3` (URL) response formats
+- All calls use sync `OpenAI` SDK via `asyncio.run_in_executor` (avoids async httpx/SSL issues on Windows)
 - Retry: `@retry` from `tenacity`, 3 attempts, exponential backoff on `RateLimitError`
 - Logs token usage per call
 
@@ -302,10 +309,10 @@ Never inline prompts in agent `run()` methods.
 
 ## Testing Approach
 
-- **Unit tests** (22 tests): Core config, state management, 2 agents, 2 utility modules — all with mocked API calls
+- **Unit tests** (25 tests): Core config, state management, 2 agents, 2 utility modules — all with mocked API calls
 - **Integration tests** (3 tests): Full LangGraph workflow with mocked LLM and SERP clients
 - **E2E tests** (3 tests): Streamlit import smoke tests + graph compilation check
-- **Total: 28 tests**
+- **Total: 31 tests**
 
 ```bash
 # All tests with coverage
@@ -331,6 +338,7 @@ openai
 streamlit
 google-search-results      # serpapi
 httpx
+certifi                    # SSL certificate bundle
 pydantic, pydantic-settings
 python-dotenv, pyyaml
 tenacity                   # retry logic
