@@ -137,11 +137,13 @@ class OpenAIClient:
         response = await asyncio.get_running_loop().run_in_executor(None, _call)
         item = response.data[0]
         if use_b64:
-            b64 = item.b64_json or ""
+            # Strip whitespace/newlines: some encoders wrap base64, and stray
+            # newlines break both the data-URI prefix check and URL parsing.
+            b64 = "".join((item.b64_json or "").split())
             url = f"data:image/png;base64,{b64}"
             revised = prompt
         else:
-            url = item.url or ""
+            url = (item.url or "").strip()
             revised = item.revised_prompt or prompt  # type: ignore[attr-defined]
 
         return {"url": url, "revised_prompt": revised}

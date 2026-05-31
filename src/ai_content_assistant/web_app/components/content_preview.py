@@ -26,8 +26,11 @@ def render_preview(state: dict | None) -> None:
     content_type = state.get("content_type", "")
     metadata = state.get("metadata") or {}
 
-    # Image output
-    if content_type == "image" or metadata.get("image_url"):
+    # Image output — only when we actually have an image payload. A failed image
+    # request keeps content_type == "image" but has no image_url; let it fall
+    # through to text rendering so the error message is shown to the user instead
+    # of being (mis)decoded as image bytes.
+    if metadata.get("image_url"):
         _render_image_preview(state, metadata)
         return
 
@@ -73,31 +76,38 @@ def render_preview(state: dict | None) -> None:
 
 
 def _render_image_preview(state: dict, metadata: dict) -> None:
-    image_url = metadata.get("image_url", state.get("final_content", ""))
+    image_url = (metadata.get("image_url") or state.get("final_content") or "").strip()
     prompt_used = metadata.get("prompt_used", "")
     source = metadata.get("image_source", "")
 
-    if image_url.startswith("data:image"):
-        # st.image() doesn't accept data URIs as strings — decode to bytes first
+    if not image_url:
+        st.warning("Image URL not available")
+        return
+
+    img_bytes: bytes | None = None
+    if image_url.startswith("data:"):
+        # st.image() doesn't accept data URIs as strings — decode to bytes first.
         try:
-            b64_data = image_url.split(",", 1)[1]
-            img_bytes = base64.b64decode(b64_data)
-            st.image(
-                img_bytes, caption=f"Generated via {source}", use_container_width=True
-            )
+            img_bytes = base64.b64decode(image_url.split(",", 1)[1])
         except Exception as exc:
-            st.warning(f"Could not render image: {exc}")
-    elif image_url:
+            st.warning(f"Could not decode image: {exc}")
+            return
+    elif image_url.startswith(("http://", "https://")):
         try:
             with httpx.Client(verify=certifi.where()) as client:
                 img_bytes = client.get(image_url, timeout=30).content
-            st.image(
-                img_bytes, caption=f"Generated via {source}", use_container_width=True
-            )
         except Exception as exc:
             st.warning(f"Could not fetch image: {exc}")
+            return
     else:
-        st.warning("Image URL not available")
+        # Not a scheme'd URL and not a data URI — treat as a raw base64 payload.
+        try:
+            img_bytes = base64.b64decode(image_url, validate=False)
+        except Exception as exc:
+            st.warning(f"Could not decode image: {exc}")
+            return
+
+    st.image(img_bytes, caption=f"Generated via {source}", use_container_width=True)
 
     if prompt_used:
         with st.expander("🔍 Prompt used"):

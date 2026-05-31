@@ -128,26 +128,7 @@ def _run_workflow(user_message: str) -> dict:
 
 def _render_preview_panel(state: dict | None) -> None:
     """Render the Content Preview column for an existing (completed) result."""
-    meta = (state or {}).get("metadata") or {}
-    image_url = meta.get("image_url") or ""
-    if image_url.startswith("data:image"):
-        import base64 as _b64
-
-        st.subheader("Content Preview")
-        try:
-            img_bytes = _b64.b64decode(image_url.split(",", 1)[1])
-            st.image(
-                img_bytes,
-                caption=f"Generated via {meta.get('image_source', 'gpt-image-1')}",
-                use_container_width=True,
-            )
-        except Exception as exc:
-            st.warning(f"Could not render image: {exc}")
-        if meta.get("prompt_used"):
-            with st.expander("🔍 Prompt used"):
-                st.text(meta["prompt_used"])
-    else:
-        render_preview(state)
+    render_preview(state)
 
 
 def _record_response(user_input: str, result: dict) -> None:
@@ -156,10 +137,11 @@ def _record_response(user_input: str, result: dict) -> None:
         result.get("final_content")
         or "I couldn't generate a response. Please try again."
     )
-    if result.get("content_type") == "image":
+    meta = result.get("metadata") or {}
+    if result.get("content_type") == "image" and meta.get("image_url"):
         preview_msg = (
             "✅ Image generated! See the preview panel →\n\n"
-            f"*Prompt used:* {(result.get('metadata') or {}).get('prompt_used', '')[:100]}"
+            f"*Prompt used:* {meta.get('prompt_used', '')[:100]}"
         )
     else:
         preview_msg = assistant_msg[:300] + ("…" if len(assistant_msg) > 300 else "")
