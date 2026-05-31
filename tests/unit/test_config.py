@@ -31,9 +31,11 @@ def test_settings_missing_openai_key(monkeypatch):
     from importlib import reload
     import ai_content_assistant.core.config as config_module
 
+    reload(config_module)
+    # _env_file=None disables .env loading so a local .env can't satisfy the
+    # required key and mask the validation we're asserting on.
     with pytest.raises((ValidationError, Exception)):
-        reload(config_module)
-        config_module.Settings()
+        config_module.Settings(_env_file=None)
 
 
 def test_settings_optional_keys_default_none(monkeypatch):
@@ -48,6 +50,8 @@ def test_settings_optional_keys_default_none(monkeypatch):
 
     reload(config_module)
 
-    s = config_module.Settings()
+    # _env_file=None disables .env loading so optional keys actually default to
+    # None instead of being populated from a local .env.
+    s = config_module.Settings(_env_file=None)
     assert s.perplexity_api_key is None
     assert s.stability_api_key is None

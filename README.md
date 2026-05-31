@@ -197,11 +197,25 @@ src/ai_content_assistant/
 └── workflow/            AgentState TypedDict + LangGraph graph
 
 config/                  Per-environment YAML config + services.yaml (API URLs, timeouts)
+docs/                    Architecture, API reference, deployment, service comparison
 tests/                   Unit (25), integration (3), and e2e smoke (3) test suites
 pyproject.toml           Project metadata + dependencies (managed by UV)
 Dockerfile               Multi-stage production container image
 docker-compose.yml       Single-command deployment
 ```
+
+---
+
+## Documentation
+
+Detailed documentation lives in the [`docs/`](docs/) folder:
+
+| Document | Contents |
+|----------|----------|
+| [Architecture & Technical Design](docs/architecture.md) | System overview, the six agents, state management, routing, error handling & fallbacks, quality pipeline, scalability, and key design trade-offs |
+| [API Documentation](docs/api_documentation.md) | Public interface for every agent, the integration clients, utilities, the workflow facade, and configuration reference |
+| [Deployment Guide](docs/deployment_guide.md) | Local, Docker, and cloud deployment; environment configuration; SSL setup; troubleshooting |
+| [Service Comparison Analysis](docs/service_comparison.md) | Provider comparison and rationale, cost-benefit analysis, cost-management levers, and recommendations by use case |
 
 ---
 
