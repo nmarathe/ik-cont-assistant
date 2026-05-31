@@ -6,28 +6,17 @@ import httpx
 import certifi
 import streamlit as st
 
-from ai_content_assistant.utils.export_tools import generate_filename, to_markdown, to_plain_text
+from ai_content_assistant.utils.export_tools import (
+    generate_filename,
+    to_markdown,
+    to_plain_text,
+)
 from ai_content_assistant.utils.quality_validation import score_content
 
 
 def render_preview(state: dict | None) -> None:
     """Render the right-side content preview panel."""
     st.subheader("Content Preview")
-
-    # --- TEMPORARY DEBUG (remove after fixing) ---
-    if state is None:
-        st.warning("DEBUG: state is None — current_state was never set")
-    else:
-        metadata_dbg = state.get("metadata") or {}
-        fc = state.get("final_content") or ""
-        st.info(
-            f"DEBUG ▸ content_type={state.get('content_type')!r} | "
-            f"final_content len={len(fc)} | "
-            f"metadata keys={list(metadata_dbg.keys())} | "
-            f"image_url len={len(str(metadata_dbg.get('image_url') or ''))} | "
-            f"error={state.get('error')!r}"
-        )
-    # --- END DEBUG ---
 
     if not state or not state.get("final_content"):
         st.info("Generated content will appear here once you submit a request.")
@@ -48,7 +37,12 @@ def render_preview(state: dict | None) -> None:
         col1, col2, col3 = st.columns(3)
         col1.metric("Quality Score", f"{quality}/100")
         if content_type == "blog" and metadata.get("title"):
-            col2.metric("Title", metadata["title"][:30] + "…" if len(metadata.get("title", "")) > 30 else metadata.get("title", ""))
+            col2.metric(
+                "Title",
+                metadata["title"][:30] + "…"
+                if len(metadata.get("title", "")) > 30
+                else metadata.get("title", ""),
+            )
         if content_type == "linkedin" and metadata.get("hashtags"):
             col3.metric("Hashtags", len(metadata["hashtags"]))
 
@@ -66,7 +60,9 @@ def render_preview(state: dict | None) -> None:
             variants = metadata["variants"]
             for tone, text in variants.items():
                 st.markdown(f"**{tone.replace('_', ' ').title()}**")
-                st.text_area("", value=text, height=120, key=f"variant_{tone}", disabled=True)
+                st.text_area(
+                    "", value=text, height=120, key=f"variant_{tone}", disabled=True
+                )
 
     # Main content display
     st.markdown("---")
@@ -86,14 +82,18 @@ def _render_image_preview(state: dict, metadata: dict) -> None:
         try:
             b64_data = image_url.split(",", 1)[1]
             img_bytes = base64.b64decode(b64_data)
-            st.image(img_bytes, caption=f"Generated via {source}", use_container_width=True)
+            st.image(
+                img_bytes, caption=f"Generated via {source}", use_container_width=True
+            )
         except Exception as exc:
             st.warning(f"Could not render image: {exc}")
     elif image_url:
         try:
             with httpx.Client(verify=certifi.where()) as client:
                 img_bytes = client.get(image_url, timeout=30).content
-            st.image(img_bytes, caption=f"Generated via {source}", use_container_width=True)
+            st.image(
+                img_bytes, caption=f"Generated via {source}", use_container_width=True
+            )
         except Exception as exc:
             st.warning(f"Could not fetch image: {exc}")
     else:
@@ -107,7 +107,9 @@ def _render_image_preview(state: dict, metadata: dict) -> None:
 def _render_export_buttons(content: str, content_type: str, metadata: dict) -> None:
     st.divider()
     st.caption("Export")
-    filename = generate_filename(content_type or "content", metadata.get("slug") or "output")
+    filename = generate_filename(
+        content_type or "content", metadata.get("slug") or "output"
+    )
 
     col1, col2 = st.columns(2)
     md_content = to_markdown(content, metadata)

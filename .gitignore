@@ -9,6 +9,9 @@
 *.p12
 *.pfx
 
+# Generated CA bundle (contains Windows enterprise certs — machine-specific)
+certs/
+
 # Streamlit secrets file (distinct from the rest of .streamlit/ which is safe)
 .streamlit/secrets.toml
 

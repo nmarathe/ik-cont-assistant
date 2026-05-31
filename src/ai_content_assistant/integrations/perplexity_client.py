@@ -4,7 +4,6 @@ import logging
 import re
 
 import httpx
-import certifi
 from openai import AsyncOpenAI
 
 from ai_content_assistant.core.config import settings
@@ -28,7 +27,7 @@ class PerplexityClient:
             return "", []
 
         logger.info("Perplexity research: %s", query)
-        async with httpx.AsyncClient(verify=certifi.where()) as http:
+        async with httpx.AsyncClient(verify=False) as http:
             client = AsyncOpenAI(
                 base_url=_PERPLEXITY_BASE,
                 api_key=self._api_key,

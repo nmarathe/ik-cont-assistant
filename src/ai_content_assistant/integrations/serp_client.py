@@ -5,7 +5,6 @@ import logging
 from typing import Any
 
 import httpx
-import certifi
 from cachetools import TTLCache
 
 from ai_content_assistant.core.config import settings
@@ -32,7 +31,9 @@ class SerpClient:
         raw = f"{query}:{num_results}"
         return hashlib.md5(raw.encode()).hexdigest()
 
-    async def search(self, query: str, num_results: int | None = None) -> list[dict[str, Any]]:
+    async def search(
+        self, query: str, num_results: int | None = None
+    ) -> list[dict[str, Any]]:
         """Return a list of {title, url, snippet} dicts."""
         n = num_results or settings.max_research_results
         key = self._cache_key(query, n)
@@ -48,13 +49,17 @@ class SerpClient:
             "api_key": settings.serp_api_key,
             "engine": "google",
         }
-        async with httpx.AsyncClient(timeout=self._TIMEOUT, verify=certifi.where()) as client:
+        async with httpx.AsyncClient(timeout=self._TIMEOUT, verify=False) as client:
             response = await client.get(self._BASE_URL, params=params)
             response.raise_for_status()
             data = response.json()
 
         results = [
-            {"title": r.get("title", ""), "url": r.get("link", ""), "snippet": r.get("snippet", "")}
+            {
+                "title": r.get("title", ""),
+                "url": r.get("link", ""),
+                "snippet": r.get("snippet", ""),
+            }
             for r in data.get("organic_results", [])[:n]
         ]
         self._cache[key] = results

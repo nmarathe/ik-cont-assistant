@@ -1,13 +1,5 @@
 """Main Streamlit application entry point."""
 
-# Ensure Python/requests/httpx use the certifi CA bundle on all platforms.
-# This avoids platform-specific certificate errors like
-# "[SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer certificate".
-import os
-import certifi
-os.environ.setdefault("SSL_CERT_FILE", certifi.where())
-os.environ.setdefault("REQUESTS_CA_BUNDLE", certifi.where())
-
 import asyncio
 import logging
 import queue as queue_module
@@ -25,7 +17,10 @@ from ai_content_assistant.utils.guardrails import (
     check_moderation,
     detect_pii,
 )
-from ai_content_assistant.web_app.components.chat_panel import render_chat_history, render_input_area
+from ai_content_assistant.web_app.components.chat_panel import (
+    render_chat_history,
+    render_input_area,
+)
 from ai_content_assistant.web_app.components.content_preview import render_preview
 from ai_content_assistant.web_app.components.sidebar import render_sidebar
 from ai_content_assistant.workflow.state_management import append_to_history
@@ -33,18 +28,13 @@ from ai_content_assistant.workflow.state_management import append_to_history
 configure_logging()
 logger = logging.getLogger(__name__)
 
-# This prints on EVERY Streamlit script re-run (every page load / widget interaction).
-# If you see this in the terminal, stdout reaches the terminal correctly.
-import sys as _sys
-print(f">>> STREAMLIT_APP LOADED (stdout={_sys.stdout})", flush=True, file=_sys.__stdout__)
-
 
 def initialize_session_state() -> None:
     """Set default values for Streamlit session state on first load."""
     defaults = {
-        "messages": [],          # conversation history for UI display
-        "agent_history": [],     # conversation history passed to agents
-        "current_state": None,   # last AgentState result
+        "messages": [],  # conversation history for UI display
+        "agent_history": [],  # conversation history passed to agents
+        "current_state": None,  # last AgentState result
         "tone": "professional",
         "word_count": 2000,
         "keywords": "",
@@ -60,8 +50,10 @@ def initialize_session_state() -> None:
 def _validate_input(text: str) -> bool:
     """Run all pre-workflow guards. Returns False (and shows st.error) if blocked."""
     now = time.time()
-    if st.session_state.rate_window_start is None or \
-            now - st.session_state.rate_window_start > 3600:
+    if (
+        st.session_state.rate_window_start is None
+        or now - st.session_state.rate_window_start > 3600
+    ):
         st.session_state.request_count = 0
         st.session_state.rate_window_start = now
 
@@ -99,15 +91,12 @@ def _validate_input(text: str) -> bool:
 
 def _run_workflow(user_message: str) -> dict:
     """Run the async workflow in a dedicated thread; stream per-node progress."""
-    print(f"\n>>> [_run_workflow] START: {user_message[:60]!r}", flush=True, file=_sys.__stdout__)
     result_queue: queue_module.Queue = queue_module.Queue()
     session_copy = dict(st.session_state)
 
     async def _collect() -> None:
-        print(f">>> [_collect] thread started, SSL_CERT_FILE={os.environ.get('SSL_CERT_FILE')!r}", flush=True, file=_sys.__stdout__)
         final_state: dict = {}
         async for node_name, delta in stream_request(user_message, session_copy):
-            print(f">>> [_collect] node={node_name!r}", flush=True, file=_sys.__stdout__)
             result_queue.put(("step", node_name, delta))
             final_state.update(delta)
         result_queue.put(("done", None, final_state))
@@ -159,6 +148,7 @@ def main() -> None:
         _image_url = _meta.get("image_url") or ""
         if _image_url.startswith("data:image"):
             import base64 as _b64
+
             st.subheader("Content Preview")
             try:
                 _img_bytes = _b64.b64decode(_image_url.split(",", 1)[1])
@@ -187,22 +177,35 @@ def main() -> None:
             st.session_state.current_state = result
 
             # Add assistant response to chat
-            assistant_msg = result.get("final_content") or "I couldn't generate a response. Please try again."
+            assistant_msg = (
+                result.get("final_content")
+                or "I couldn't generate a response. Please try again."
+            )
             # For non-image content, show a short preview in chat
             if result.get("content_type") == "image":
                 preview_msg = f"✅ Image generated! See the preview panel →\n\n*Prompt used:* {(result.get('metadata') or {}).get('prompt_used', '')[:100]}"
             else:
-                preview_msg = assistant_msg[:300] + ("…" if len(assistant_msg) > 300 else "")
+                preview_msg = assistant_msg[:300] + (
+                    "…" if len(assistant_msg) > 300 else ""
+                )
 
-            st.session_state.messages.append({"role": "assistant", "content": preview_msg})
+            st.session_state.messages.append(
+                {"role": "assistant", "content": preview_msg}
+            )
 
             # Update agent conversation history (last 5)
             agent_hist = append_to_history(
-                {"conversation_history": st.session_state.agent_history,
-                 "user_message": user_input,
-                 "next_agent": None, "research_output": None,
-                 "sources": None, "final_content": None,
-                 "content_type": None, "error": None, "metadata": None},
+                {
+                    "conversation_history": st.session_state.agent_history,
+                    "user_message": user_input,
+                    "next_agent": None,
+                    "research_output": None,
+                    "sources": None,
+                    "final_content": None,
+                    "content_type": None,
+                    "error": None,
+                    "metadata": None,
+                },
                 "user",
                 user_input,
             )
@@ -212,7 +215,9 @@ def main() -> None:
         except Exception as exc:
             logger.error("Workflow error: %s", exc, exc_info=True)
             error_msg = f"An error occurred: {exc}"
-            st.session_state.messages.append({"role": "assistant", "content": error_msg})
+            st.session_state.messages.append(
+                {"role": "assistant", "content": error_msg}
+            )
 
         st.rerun()
 

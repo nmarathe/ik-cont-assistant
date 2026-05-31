@@ -6,7 +6,10 @@ from ai_content_assistant.agents.image_prompts import PROMPT_OPTIMIZER_SYSTEM
 from ai_content_assistant.core.config import settings
 from ai_content_assistant.integrations.image_clients import stability_client
 from ai_content_assistant.integrations.openai_client import openai_client
-from ai_content_assistant.utils.guardrails import async_check_moderation, check_image_prompt
+from ai_content_assistant.utils.guardrails import (
+    async_check_moderation,
+    check_image_prompt,
+)
 from ai_content_assistant.workflow.state_management import AgentState
 
 logger = logging.getLogger(__name__)
@@ -34,7 +37,9 @@ class ImageGenerator:
             result = await openai_client.generate_image(prompt)
             return {**result, "source": settings.image_model}
         except Exception as exc:
-            logger.warning("%s failed (%s); trying Stability AI", settings.image_model, exc)
+            logger.warning(
+                "%s failed (%s); trying Stability AI", settings.image_model, exc
+            )
             if settings.stability_api_key:
                 b64 = await stability_client.generate(prompt)
                 return {
@@ -42,21 +47,22 @@ class ImageGenerator:
                     "revised_prompt": prompt,
                     "source": "stability-ai",
                 }
-            raise RuntimeError("Image generation failed and no fallback available") from exc
+            raise RuntimeError(
+                "Image generation failed and no fallback available"
+            ) from exc
 
     async def run(self, state: AgentState) -> AgentState:
         """Optimize prompt and generate image."""
         intent = state["user_message"]
-        print(f"[ImageGenerator] run() called, intent={intent[:40]!r}", flush=True)
         logger.info("ImageGenerator processing: %s", intent[:80])
 
         try:
             optimized = await self.optimize_prompt(intent)
-            print(f"[ImageGenerator] optimize_prompt OK: {optimized[:60]!r}", flush=True)
             logger.info("ImageGenerator: optimize_prompt OK")
         except Exception as exc:
-            print(f"[ImageGenerator] optimize_prompt FAILED {type(exc).__name__}: {exc}", flush=True)
-            logger.error("ImageGenerator: optimize_prompt FAILED %s: %s", type(exc).__name__, exc)
+            logger.error(
+                "ImageGenerator: optimize_prompt FAILED %s: %s", type(exc).__name__, exc
+            )
             raise
 
         check_image_prompt(optimized)
@@ -65,14 +71,20 @@ class ImageGenerator:
             await async_check_moderation(optimized)
             logger.info("ImageGenerator: moderation OK")
         except Exception as exc:
-            logger.error("ImageGenerator: moderation FAILED %s: %s", type(exc).__name__, exc)
+            logger.error(
+                "ImageGenerator: moderation FAILED %s: %s", type(exc).__name__, exc
+            )
             raise
 
         try:
             result = await self.generate(optimized)
-            logger.info("ImageGenerator: generate OK, url len=%d", len(result.get("url", "")))
+            logger.info(
+                "ImageGenerator: generate OK, url len=%d", len(result.get("url", ""))
+            )
         except Exception as exc:
-            logger.error("ImageGenerator: generate FAILED %s: %s", type(exc).__name__, exc)
+            logger.error(
+                "ImageGenerator: generate FAILED %s: %s", type(exc).__name__, exc
+            )
             raise
 
         return {

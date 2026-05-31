@@ -12,9 +12,13 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
-import certifi
 from openai import OpenAI, RateLimitError
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from ai_content_assistant.core.config import settings
 
@@ -23,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 def _make_sync_client() -> tuple["OpenAI", "httpx.Client"]:
     """Return (OpenAI, httpx.Client) — caller must close the httpx client."""
-    http = httpx.Client(verify=certifi.where())
+    http = httpx.Client(verify=False)
     return OpenAI(api_key=settings.openai_api_key, http_client=http), http
 
 
@@ -82,6 +86,7 @@ class OpenAIClient:
         max_tokens: int = 3500,
     ) -> AsyncIterator[str]:
         """Yield content chunks. Collected synchronously in executor, then yielded."""
+
         def _collect() -> list[str]:
             client, http = _make_sync_client()
             chunks: list[str] = []

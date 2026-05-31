@@ -11,7 +11,11 @@ from ai_content_assistant.agents.image_generator import ImageGenerator
 from ai_content_assistant.agents.linkedin_writer import LinkedInWriter
 from ai_content_assistant.agents.query_handler import QueryHandler
 from ai_content_assistant.agents.research_agent import ResearchAgent
-from ai_content_assistant.core.router import handle_error, route_after_query_handler, route_after_research
+from ai_content_assistant.core.router import (
+    handle_error,
+    route_after_query_handler,
+    route_after_research,
+)
 from ai_content_assistant.workflow.state_management import AgentState
 
 logger = logging.getLogger(__name__)
@@ -21,13 +25,16 @@ _compiled_graph: Optional[object] = None
 
 def _make_node(agent_instance):
     """Wrap an agent's run() in a try/except that sets state['error'] on failure."""
+
     async def node(state: AgentState) -> AgentState:
         try:
             return await agent_instance.run(state)
         except Exception as exc:
-            print(f"[_make_node] {type(agent_instance).__name__} raised {type(exc).__name__}: {exc}", flush=True)
-            logger.error("%s failed: %s", type(agent_instance).__name__, exc, exc_info=True)
+            logger.error(
+                "%s failed: %s", type(agent_instance).__name__, exc, exc_info=True
+            )
             return {**state, "error": f"{type(exc).__name__}: {exc}"}
+
     node.__name__ = type(agent_instance).__name__
     return node
 

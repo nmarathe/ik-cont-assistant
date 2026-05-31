@@ -4,7 +4,6 @@ import logging
 import re
 
 import httpx
-import certifi
 
 from ai_content_assistant.core.config import settings
 
@@ -25,16 +24,27 @@ class ImageSafetyError(ValueError):
 
 _PII_PATTERNS: dict[str, re.Pattern[str]] = {
     "email address": re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"),
-    "phone number":  re.compile(r"(\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}"),
-    "SSN":           re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
-    "credit card":   re.compile(r"\b(?:\d[ -]?){13,16}\b"),
+    "phone number": re.compile(r"(\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}"),
+    "SSN": re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
+    "credit card": re.compile(r"\b(?:\d[ -]?){13,16}\b"),
 }
 
-_IMAGE_DENY_KEYWORDS: frozenset[str] = frozenset([
-    "nude", "naked", "nsfw", "explicit", "pornographic",
-    "violence", "gore", "weapon", "bomb",
-    "child", "minor", "underage",
-])
+_IMAGE_DENY_KEYWORDS: frozenset[str] = frozenset(
+    [
+        "nude",
+        "naked",
+        "nsfw",
+        "explicit",
+        "pornographic",
+        "violence",
+        "gore",
+        "weapon",
+        "bomb",
+        "child",
+        "minor",
+        "underage",
+    ]
+)
 
 _MODERATION_URL = "https://api.openai.com/v1/moderations"
 
@@ -65,7 +75,7 @@ def check_moderation(text: str) -> None:
             headers={"Authorization": f"Bearer {settings.openai_api_key}"},
             json={"input": text},
             timeout=10.0,
-            verify=certifi.where(),
+            verify=False,
         )
         response.raise_for_status()
     except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError) as exc:
@@ -84,7 +94,7 @@ def check_moderation(text: str) -> None:
 async def async_check_moderation(text: str) -> None:
     """Async Moderation API call for use inside async agent methods."""
     try:
-        async with httpx.AsyncClient(timeout=10.0, verify=certifi.where()) as client:
+        async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
             response = await client.post(
                 _MODERATION_URL,
                 headers={"Authorization": f"Bearer {settings.openai_api_key}"},
