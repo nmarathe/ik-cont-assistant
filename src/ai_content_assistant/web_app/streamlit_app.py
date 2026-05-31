@@ -34,6 +34,7 @@ def initialize_session_state() -> None:
     defaults = {
         "messages": [],  # conversation history for UI display
         "agent_history": [],  # conversation history passed to agents
+        "carry_forward": "",  # prompt to re-populate into the chat input next run
         "current_state": None,  # last AgentState result
         "tone": "professional",
         "word_count": 2000,
@@ -235,7 +236,9 @@ def main() -> None:
             _render_preview_panel(st.session_state.current_state)
 
     # Rerun after handling a submission so chat history + input box refresh.
+    # Queue the just-submitted prompt to be carried forward into the chat input.
     if pending:
+        st.session_state.carry_forward = user_input
         st.rerun()
 
 
